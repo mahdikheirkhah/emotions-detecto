@@ -1,0 +1,111 @@
+# =============================================================
+# Emotions Detecto — Ablation-Driven Configuration
+# =============================================================
+# Every value has an `# options:` comment listing all valid
+# choices. Change exactly ONE value at a time to run an
+# ablation. Never hardcode a decision in source code.
+
+# ===== Global =====
+global:
+  seed: 42                         # options: any integer — fixes numpy/tf/random for reproducibility
+  log_level: "INFO"                # options: DEBUG | INFO | WARNING | ERROR
+
+# ===== Paths =====
+paths:
+  data_dir: "data/"
+  results_dir: "results/"
+  model_dir: "results/model/"
+  preprocessing_test_dir: "results/preprocessing_test/"
+  logs_dir: "logs/"
+  model_save_path: "results/model/final_emotion_model.keras"
+  arch_txt_path: "results/model/architecture.txt"
+  learning_curves_path: "results/model/learning_curves.png"
+  tensorboard_dir: "logs/tensorboard/"
+
+# ===== Pipeline stage toggles (ablation switches) =====
+# Set a stage to false to measure what it contributes to accuracy.
+stages:
+  cleaning: true          # options: true | false
+  preprocessing: true     # options: true | false
+  augmentation: true      # options: true | false  (off = raw-pixel baseline)
+  decomposition: false    # options: true | false  (PCA; usually off for a CNN)
+  face_detection: true    # options: true | false
+  train: true             # options: true | false
+  evaluate: true          # options: true | false
+  tuning: false           # options: true | false
+
+# ===== Data cleaning =====
+cleaning:
+  remove_duplicates: true              # options: true | false
+  handle_imbalance: true              # options: true | false
+  imbalance_strategy: "class_weight"  # options: none | class_weight | oversample | undersample
+
+# ===== Preprocessing / feature engineering =====
+preprocessing:
+  image_size: 48                   # options: 48 | 64 | 96  (FER-2013 native is 48)
+  grayscale: true                  # options: true | false
+  normalization: "rescale"         # options: none | rescale | standardize | histogram_eq
+  histogram_equalization: false    # options: true | false  (applied before normalization)
+
+# ===== Data augmentation =====
+augmentation:
+  strategy: "basic"                # options: basic | heavy | none
+  horizontal_flip: true            # options: true | false
+  rotation_range: 10               # options: 0 | 5 | 10 | 15
+  zoom_range: 0.1                  # options: 0.0 | 0.1 | 0.2
+  width_shift_range: 0.1           # options: 0.0 | 0.1 | 0.2
+  height_shift_range: 0.1          # options: 0.0 | 0.1 | 0.2
+
+# ===== Model =====
+model:
+  architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16
+  optimizer: "adam"                # options: adam | sgd | rmsprop
+  learning_rate: 0.001             # options: 0.01 | 0.001 | 0.0001
+  batch_size: 64                   # options: 32 | 64 | 128
+  epochs: 100                      # options: any integer
+  dropout_rate: 0.5                # options: 0.3 | 0.4 | 0.5
+  num_conv_blocks: 3               # options: 2 | 3 | 4
+  filters_start: 32                # options: 32 | 64
+  loss: "categorical_crossentropy" # options: categorical_crossentropy | focal_loss
+  num_classes: 7                   # fixed: Happy/Sad/Angry/Surprise/Fear/Disgust/Neutral
+
+# ===== Callbacks =====
+callbacks:
+  early_stopping_patience: 10      # options: 5 | 10 | 15
+  reduce_lr_patience: 5            # options: 3 | 5 | 7
+  reduce_lr_factor: 0.5            # options: 0.2 | 0.5
+  min_lr: 0.000001                 # options: any small float
+
+# ===== Hyperparameter tuning =====
+tuning:
+  strategy: "random"               # options: random | bayesian | hyperband
+  max_trials: 10                   # options: any integer
+  executions_per_trial: 1          # options: 1 | 2 | 3
+  tuning_dir: "logs/tuning/"
+
+# ===== Evaluation =====
+evaluation:
+  metrics:                         # options per item: accuracy | f1_macro | confusion_matrix | roc_auc
+    - "accuracy"
+    - "f1_macro"
+    - "confusion_matrix"
+  cross_validation: false          # options: true | false
+  cv_folds: 5                      # options: 3 | 5 | 10
+
+# ===== Face detection =====
+face_detector:
+  backend: "haar"                  # options: haar | dnn
+  haar_cascade: "haarcascade_frontalface_default.xml"
+  dnn_prototxt: "models/deploy.prototxt"
+  dnn_model: "models/res10_300x300_ssd_iter_140000.caffemodel"
+  scale_factor: 1.1                # options: 1.05 | 1.1 | 1.3
+  min_neighbors: 5                 # options: 3 | 5 | 7
+  min_size: [30, 30]               # options: [24,24] | [30,30] | [48,48]
+  confidence_threshold: 0.5        # options: 0.3 | 0.5 | 0.7  (dnn backend only)
+
+# ===== Video / live stream =====
+video:
+  source: 0                        # options: 0 (webcam) | "path/to/video.mp4"
+  frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
+  display_fps: true                # options: true | false
+  window_title: "Emotion Detector"
