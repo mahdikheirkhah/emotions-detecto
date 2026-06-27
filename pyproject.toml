@@ -6,8 +6,8 @@ authors = [
     {name = "mahdikheirkhah", email = "mohammad.kheirkhah@gritlab.ax"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
-dependencies = []
+requires-python = ">=3.11,<4.0"
+dependencies = ["tensorflow (>=2.21.0,<3.0.0)", "tf-keras (>=2.21.0,<3.0.0)", "opencv-python (>=4.13.0.92,<5.0.0.0)", "numpy (<2.5)", "pandas (>=3.0.3,<4.0.0)", "matplotlib (>=3.11.0,<4.0.0)", "seaborn (>=0.13.2,<0.14.0)", "scikit-learn (>=1.9.0,<2.0.0)", "pyyaml (>=6.0.3,<7.0.0)", "tensorboard (>=2.20.0,<3.0.0)", "streamlit (>=1.58.0,<2.0.0)", "loguru (>=0.7.3,<0.8.0)"]
 
 [tool.poetry]
 package-mode = false
@@ -18,3 +18,11 @@ line-length = 88
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "black (>=26.5.1,<27.0.0)",
+    "pytest (>=9.1.1,<10.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)",
+    "ipykernel (>=7.3.0,<8.0.0)",
+    "keras-tuner (>=1.4.8,<2.0.0)"
+]
