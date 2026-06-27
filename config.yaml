@@ -10,6 +10,14 @@ global:
   seed: 42                         # options: any integer — fixes numpy/tf/random for reproducibility
   log_level: "INFO"                # options: DEBUG | INFO | WARNING | ERROR
 
+# ===== Dataset =====
+data:
+  url: "https://assets.01-edu.org/ai-branch/project3/emotions-detector.zip"
+  zip_name: "emotions-detector.zip"
+  expected_files:          # verified after extraction
+    - "train.csv"
+    - "test.csv"
+
 # ===== Paths =====
 paths:
   data_dir: "data/"
