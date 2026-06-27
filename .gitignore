@@ -1,0 +1,45 @@
+# Virtual environment
+.venv/
+venv/
+
+# Raw dataset (large CSV files — never commit)
+data/*.csv
+data/*.zip
+
+# Trained model artifacts
+*.keras
+*.h5
+*.pkl
+
+# TensorBoard logs
+logs/
+runs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# pytest cache
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
