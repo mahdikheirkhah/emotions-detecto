@@ -1,28 +1,38 @@
-# Virtual environment
+# Python Virtual Environments
 .venv/
+env/
 venv/
 
-# Raw dataset (large CSV files — never commit)
+# Python Cache
+__pycache__/
+*__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.ipynb_checkpoints
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# Raw Data (Too large for Git)
 data/*.csv
+data/*.json
 data/*.zip
 
-# Trained model artifacts
+# Machine Learning Models
 *.keras
 *.h5
 *.pkl
+*.model
 
-# TensorBoard logs
+# TensorBoard / run logs
 logs/
 runs/
+*.log
 
-# Python cache
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb_checkpoints
+# Secrets and Environment Variables
+.env
 
 # Distribution / packaging
 dist/
@@ -30,16 +40,15 @@ build/
 *.egg-info/
 .eggs/
 
-# pytest cache
+# pytest / mypy cache
 .pytest_cache/
-
-# mypy
 .mypy_cache/
-
-# macOS
-.DS_Store
 
 # Editor
 .vscode/
 .idea/
 *.swp
+
+#graphify
+graphify-out/
+.agents/
