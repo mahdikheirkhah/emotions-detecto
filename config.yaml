@@ -10,6 +10,19 @@ global:
   seed: 42                         # options: any integer — fixes numpy/tf/random for reproducibility
   log_level: "INFO"                # options: DEBUG | INFO | WARNING | ERROR
 
+# ===== Dataset =====
+# Zip extracts to: train.csv, test.csv, test_with_emotions.csv,
+# icml_face_data.csv, fer2013.tar.gz (which itself contains fer2013/fer2013.csv)
+data:
+  url: "https://assets.01-edu.org/ai-branch/project3/emotions-detector.zip"
+  zip_name: "emotions-detector.zip"
+  expected_files:          # minimum files verified after extraction
+    - "train.csv"
+    - "test.csv"
+    - "test_with_emotions.csv"
+  primary_csv: "train.csv"          # main training file (Usage col: Training/PrivateTest/PublicTest)
+  test_csv: "test_with_emotions.csv" # test file with emotion labels
+
 # ===== Paths =====
 paths:
   data_dir: "data/"
