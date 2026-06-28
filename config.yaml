@@ -11,8 +11,12 @@ global:
   log_level: "INFO"                # options: DEBUG | INFO | WARNING | ERROR
 
 # ===== Dataset =====
-# Zip extracts to: train.csv, test.csv, test_with_emotions.csv,
-# icml_face_data.csv, fer2013.tar.gz (which itself contains fer2013/fer2013.csv)
+# Zip extracts to:
+#   train.csv              — emotion, pixels              (no split column; all training rows)
+#   test.csv               — pixels only                  (unlabelled, not used in pipeline)
+#   test_with_emotions.csv — emotion, pixels              (held-out evaluation set)
+#   icml_face_data.csv     — emotion, usage, pixels       (has Training/PublicTest/PrivateTest split column)
+#   fer2013.tar.gz         → fer2013/fer2013.csv          (same schema as icml_face_data.csv)
 data:
   url: "https://assets.01-edu.org/ai-branch/project3/emotions-detector.zip"
   zip_name: "emotions-detector.zip"
@@ -20,8 +24,10 @@ data:
     - "train.csv"
     - "test.csv"
     - "test_with_emotions.csv"
-  primary_csv: "train.csv"          # main training file (Usage col: Training/PrivateTest/PublicTest)
-  test_csv: "test_with_emotions.csv" # test file with emotion labels
+    - "icml_face_data.csv"
+  primary_csv: "icml_face_data.csv"  # split-aware file: emotion + usage + pixels
+  train_csv: "train.csv"             # flat training file: emotion + pixels (no Usage col)
+  test_csv: "test_with_emotions.csv" # held-out evaluation: emotion + pixels
 
 # ===== Paths =====
 paths:

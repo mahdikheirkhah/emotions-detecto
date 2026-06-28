@@ -13,6 +13,7 @@ from src.emotion_detector.utils.logging import logger
 
 _VALID_SPLITS = frozenset({"Training", "PublicTest", "PrivateTest"})
 _REQUIRED_COLS = frozenset({"emotion", "pixels", "Usage"})
+# icml_face_data.csv ships with lowercase 'usage'; we normalise after load.
 
 
 class Fer2013Fetcher(BaseDatasetFetcher):
@@ -25,7 +26,7 @@ class Fer2013Fetcher(BaseDatasetFetcher):
 
     Config keys consumed:
         paths.data_dir          — directory containing the CSV
-        data.primary_csv        — CSV filename (e.g. ``"train.csv"``)
+        data.primary_csv        — CSV with a Usage column (``"icml_face_data.csv"``)
         preprocessing.image_size — side length in pixels (default 48)
     """
 
@@ -67,6 +68,12 @@ class Fer2013Fetcher(BaseDatasetFetcher):
             )
 
         df = pd.read_csv(csv_path)
+
+        # Normalise the split column: real data ships as lowercase 'usage'
+        usage_col = next((c for c in df.columns if c.lower() == "usage"), None)
+        if usage_col and usage_col != "Usage":
+            df = df.rename(columns={usage_col: "Usage"})
+
         missing_cols = _REQUIRED_COLS - set(df.columns)
         if missing_cols:
             raise ValueError(f"CSV is missing required columns: {sorted(missing_cols)}")
