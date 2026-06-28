@@ -69,6 +69,10 @@ class Fer2013Fetcher(BaseDatasetFetcher):
 
         df = pd.read_csv(csv_path)
 
+        # Strip leading/trailing whitespace from column names — the real CSV
+        # ships headers like ' Usage' and ' pixels' with a leading space.
+        df.columns = df.columns.str.strip()
+
         # Normalise the split column: real data ships as lowercase 'usage'
         usage_col = next((c for c in df.columns if c.lower() == "usage"), None)
         if usage_col and usage_col != "Usage":
