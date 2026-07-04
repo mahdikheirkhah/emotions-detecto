@@ -105,6 +105,14 @@ decomposition:
                                    #   float in (0,1) = keep that fraction of variance;
                                    #   int = keep exactly that many components
 
+# ===== Train / validation / test split =====
+# Test is FIXED by the Usage column (PublicTest + PrivateTest = test_with_emotions.csv);
+# validation is carved stratified out of the Training rows. Split is seeded + fixed so
+# every ablation trains/evaluates on identical data (data.md §7 / CONTRIBUTING §8).
+split:
+  val_size: 0.2                    # options: 0.1 | 0.15 | 0.2  (fraction of Training used for validation)
+  stratify: true                   # options: true | false     (preserve per-class ratios in train/val)
+
 # ===== Model =====
 model:
   architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16
