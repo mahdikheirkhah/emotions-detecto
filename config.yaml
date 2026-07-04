@@ -82,8 +82,10 @@ cleaning:
 preprocessing:
   image_size: 48                   # options: 48 | 64 | 96  (FER-2013 native is 48)
   grayscale: true                  # options: true | false
-  normalization: "rescale"         # options: none | rescale | standardize | histogram_eq
+  normalization: "rescale"         # options: none | rescale | standardize | histogram_eq | clahe
   histogram_equalization: false    # options: true | false  (applied before normalization)
+  clahe_clip_limit: 2.0            # options: 1.0 | 2.0 | 4.0  (CLAHE contrast clip; clahe only)
+  clahe_tile_grid: 8               # options: 4 | 8 | 16       (CLAHE N×N tile grid; clahe only)
 
 # ===== Data augmentation =====
 augmentation:
