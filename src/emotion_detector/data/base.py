@@ -66,3 +66,32 @@ class BaseImagePreprocessor(abc.ABC):
         Returns:
             Preprocessed array of the same shape as *X*, dtype ``float32``.
         """
+
+
+class BaseCleaner(abc.ABC):
+    """Contract for one deterministic dataset-cleaning step.
+
+    Concrete subclasses (e.g. ``DuplicateRemover``, ``CorruptImageRemover``)
+    each remove one class of bad rows.  The orchestrator chains cleaners
+    selected via ``cfg["cleaning"]`` (see data.md §3).
+
+    Two invariants every cleaner must satisfy:
+
+    * **Idempotent** — applying it twice equals applying it once
+      (a second pass finds nothing left to remove).
+    * **Order-independent** — because each cleaner selects a row-subset from a
+      per-image property, chaining cleaners in any order yields the same result.
+    """
+
+    @abc.abstractmethod
+    def clean(self, images: NDArray, labels: NDArray) -> Tuple[NDArray, NDArray]:
+        """Return *(images, labels)* with this step's bad rows removed.
+
+        Args:
+            images: Image array of shape ``(N, H, W)`` or ``(N, H, W, C)``.
+            labels: Integer label array of shape ``(N,)`` aligned with *images*.
+
+        Returns:
+            A ``(images, labels)`` pair containing only the kept rows, in the
+            original order.
+        """
