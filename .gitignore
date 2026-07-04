@@ -19,6 +19,8 @@ Thumbs.db
 data/*.csv
 data/*.json
 data/*.zip
+data/fer2013/*
+data/*
 
 # Machine Learning Models
 *.keras
