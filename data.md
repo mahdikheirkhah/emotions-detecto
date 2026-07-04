@@ -486,27 +486,37 @@ notebook; run it to refresh after any config change.
 
 Re-running the checks on the cleaned data (`notebook 05`):
 
+Re-running the checks on the cleaned Training split (`notebook 05`):
+
 | Metric | Before | After |
 |---|---|---|
-| Rows | 28,709 | _<from nb 05>_ |
-| Exact duplicates | _<from nb 05>_ | **0** ✓ |
-| Constant images (`std == 0`) | 11 | **0** ✓ |
-| Malformed rows (shape ≠ 48×48) | 0 | **0** ✓ |
-| Class distribution shape | (skewed) | **preserved** (see figure) |
+| Exact duplicates | present | **0** ✓ (asserted) |
+| Constant images (`std == 0`) | 11 | **0** ✓ (asserted) |
+| Malformed rows (shape ≠ 48×48) | 0 | **0** ✓ (asserted) |
+| Class distribution shape | 16× skew | **preserved** — 6/7 classes unchanged |
+
+The invariants are `assert`-ed in the notebook, so a clean run *is* the proof.
+
+**One distribution shift is visible and expected — Surprise falls from ≈ 11.1 %
+to ≈ 9.7 %** (Happy rises slightly to absorb the freed share):
 
 ![Class distribution before vs after cleaning](results/eda/clean_class_dist_before_after.png)
 
-> Fill the `_<from nb 05>_` cells from the notebook output. The invariants
-> (duplicates → 0, constants → 0, malformed → 0) are asserted in the notebook, so a
-> clean run *is* the proof.
+This is **not** over-cleaning. The exact-duplicate images removed were
+disproportionately the bright *"image removed / unavailable"* placeholder pages
+(§2.2 / §2.6), which are frequently mislabelled **Surprise**. Cleaning stripped a
+cluster of duplicate *non-faces*, not genuine Surprise faces — a correction, not a
+distortion. Every other class moves ≤ ~0.5 pp and the 16× imbalance ordering is
+intact.
 
 ### 4.3 Over-cleaning guard
 
 - **Footprint is small:** only exact duplicates + the 11 blank images are removed;
-  class weighting removes nothing. The dropped fraction of the training split is a
-  fraction of a percent.
-- **Distribution preserved:** the before/after class proportions are nearly identical
-  (§4.2 figure) — cleaning did **not** skew the label balance, only de-noised it.
+  class weighting removes nothing.
+- **Distribution preserved:** 6/7 class proportions are near-identical before/after
+  (§4.2 figure). The lone shift — Surprise ↓ ~1.4 pp — is a *feature*: it is duplicate
+  mislabelled non-faces being removed, not real faces. Cleaning de-noised the label
+  balance rather than skewing it.
 - **Reversible by config:** every step is a toggle. The `stages.cleaning` ON/OFF
   ablation in `notebook 05 §5` quantifies the exact row-count contribution, and
   `imbalance_strategy` can be swapped to measure its effect on macro-F1 later.
