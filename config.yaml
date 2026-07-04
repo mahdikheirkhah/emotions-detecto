@@ -113,6 +113,11 @@ split:
   val_size: 0.2                    # options: 0.1 | 0.15 | 0.2  (fraction of Training used for validation)
   stratify: true                   # options: true | false     (preserve per-class ratios in train/val)
 
+# ===== tf.data input pipeline =====
+pipeline:
+  shuffle_buffer: 1024             # options: 512 | 1024 | 4096  (train-only shuffle buffer)
+  cache: true                      # options: true | false      (cache slices in memory before shuffle)
+
 # ===== Model =====
 model:
   architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16
