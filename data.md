@@ -456,3 +456,69 @@ Over-cleaning is its own failure mode:
 The net cleaning footprint is deliberately small: exact duplicates + 11 blank images,
 plus a loss-reweighting that removes nothing. Everything else is deferred to
 preprocessing or accepted as irreducible — and every choice is a toggle we can ablate.
+
+---
+
+## 4. Cleaning performed
+
+The strategies chosen in §3 are implemented in `src/emotion_detector/data/cleaning.py`
+(`DuplicateRemover`, `CorruptImageRemover`) and `imbalance.py`
+(`ClassWeightStrategy` …), dispatched from `config.yaml`. This section records
+**what ran** and its **measured effect**, validated by re-running the §2 EDA checks
+on the cleaned data in `notebooks/05_clean_validation.ipynb`.
+
+The validation applies to the **Training split only** — validation/test are never
+resampled or reweighted (CONTRIBUTING §8). Every number below is reproduced by that
+notebook; run it to refresh after any config change.
+
+### 4.1 Steps applied
+
+| Step | Fixes | `config.yaml` switch | Mechanism |
+|---|---|---|---|
+| **Remove exact duplicates** | P2.2, P2.3 | `remove_duplicates: true`, `dedup_scope: "global"` | MD5 of pixel bytes → `pandas.duplicated(keep="first")` |
+| **Drop constant images** | P2.5 | `drop_constant_images: true`, `min_contrast: 0` | drop rows with intensity `std == 0` |
+| **Class weighting** | P2.1 | `handle_imbalance: true`, `imbalance_strategy: "class_weight"` | `n /(k · count_c)` inverse-frequency weights → `model.fit` |
+| **Non-face filter** | P2.6 | `drop_non_faces: false` | *off* — most placeholders removed as duplicates |
+| **Lighting outliers** | P2.4 | (deferred) | normalized in preprocessing, not dropped |
+| **Label noise / low-res** | P2.7, P2.8 | — | accepted (early stopping + macro-F1) |
+
+### 4.2 Measured effect (Training split)
+
+Re-running the checks on the cleaned data (`notebook 05`):
+
+Re-running the checks on the cleaned Training split (`notebook 05`):
+
+| Metric | Before | After |
+|---|---|---|
+| Exact duplicates | present | **0** ✓ (asserted) |
+| Constant images (`std == 0`) | 11 | **0** ✓ (asserted) |
+| Malformed rows (shape ≠ 48×48) | 0 | **0** ✓ (asserted) |
+| Class distribution shape | 16× skew | **preserved** — 6/7 classes unchanged |
+
+The invariants are `assert`-ed in the notebook, so a clean run *is* the proof.
+
+**One distribution shift is visible and expected — Surprise falls from ≈ 11.1 %
+to ≈ 9.7 %** (Happy rises slightly to absorb the freed share):
+
+![Class distribution before vs after cleaning](results/eda/clean_class_dist_before_after.png)
+
+This is **not** over-cleaning. The exact-duplicate images removed were
+disproportionately the bright *"image removed / unavailable"* placeholder pages
+(§2.2 / §2.6), which are frequently mislabelled **Surprise**. Cleaning stripped a
+cluster of duplicate *non-faces*, not genuine Surprise faces — a correction, not a
+distortion. Every other class moves ≤ ~0.5 pp and the 16× imbalance ordering is
+intact.
+
+### 4.3 Over-cleaning guard
+
+- **Footprint is small:** only exact duplicates + the 11 blank images are removed;
+  class weighting removes nothing.
+- **Distribution preserved:** 6/7 class proportions are near-identical before/after
+  (§4.2 figure). The lone shift — Surprise ↓ ~1.4 pp — is a *feature*: it is duplicate
+  mislabelled non-faces being removed, not real faces. Cleaning de-noised the label
+  balance rather than skewing it.
+- **Reversible by config:** every step is a toggle. The `stages.cleaning` ON/OFF
+  ablation in `notebook 05 §5` quantifies the exact row-count contribution, and
+  `imbalance_strategy` can be swapped to measure its effect on macro-F1 later.
+
+*This closes the data loop: §2 problems → §3 strategies → §4 verified results.*
