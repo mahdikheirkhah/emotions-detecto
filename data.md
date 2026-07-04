@@ -675,3 +675,60 @@ Predicted effect of each toggle (to be confirmed by measurement, Phase 4+):
 **Prediction:** augmentation and basic rescaling are expected to matter most;
 contrast enhancement is the least certain and is exactly why it ships as a toggle
 rather than a default. *§5 records the why; `config.yaml` records the what.*
+
+---
+
+## 6. Data decomposition
+
+**Decision: PCA is available but defaults OFF** (`stages.decomposition: false`).
+It is implemented (`PcaReducer`, `build_decomposer`) and toggleable, but the
+production CNN does not use it. This section records why.
+
+### 6.1 What PCA does
+
+Principal Component Analysis finds the orthogonal directions of **maximum
+variance** in the (flattened) pixel data and projects each image onto the top *k*
+of them. It reduces `48×48 = 2304` dimensions to *k* features while keeping most
+of the variance — a compact, decorrelated representation.
+
+`PcaReducer.fit` flattens the **training** images to `(N, 2304)` and fits
+`sklearn.decomposition.PCA`; `transform` projects any split to `(N, k)`. As with
+normalization, components are fit on **train only** and reused on val/test — fitting
+on the evaluation set would leak (CONTRIBUTING §8). `n_components` accepts an int
+(*k* components) or a float in `(0, 1)` (keep that fraction of variance).
+
+### 6.2 Why PCA + CNN is usually wrong
+
+A CNN's power comes from **convolutions that exploit 2-D spatial structure** —
+neighbouring pixels, edges, local textures. PCA **flattens** the image to a vector
+and returns abstract variance directions, **destroying the spatial layout** the
+convolutions depend on. Feeding PCA features to a CNN throws away exactly what makes
+it a CNN. So for the emotion model we keep raw `48×48` images and leave this stage
+off.
+
+### 6.3 Where PCA *is* useful here
+
+| Use | Why PCA helps |
+|---|---|
+| **Linear / logistic baseline** (MNIST) | a linear model has no spatial prior; compact decorrelated features train faster and can regularize it |
+| **Visualization** | the top-2 components give a 2-D scatter to eyeball class separability (`notebook 07`) |
+| **Teaching ablation** | flipping `stages.decomposition` on for the CNN *demonstrates* the accuracy drop when spatial structure is discarded |
+
+### 6.4 Choosing the number of components
+
+The **cumulative explained-variance curve** (`notebook 07 §2`) plots how much
+variance the first *k* components capture. You pick *k* at a target (e.g. 95 %) —
+the point past which extra components add little. FER-2013 pixels are highly
+redundant (neighbouring pixels correlate), so far fewer than 2304 components reach
+95 %, which is exactly why PCA compresses images well for a linear model.
+
+### 6.5 Controls & expectation
+
+- **Config:** `stages.decomposition` (on/off), `decomposition.n_components`
+  (int or variance fraction).
+- **Default:** off.
+- **Ablation expectation:** turning PCA **on for the CNN** should *lower* accuracy
+  (spatial structure lost) — a deliberately instructive negative result. Turning it
+  on for the **linear baseline** should *speed up* training at similar accuracy.
+
+*§6 records the why; `config.yaml` holds the what; `notebook 07` shows the evidence.*
