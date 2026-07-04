@@ -54,10 +54,29 @@ stages:
   tuning: false           # options: true | false
 
 # ===== Data cleaning =====
+# Each option fixes a numbered problem from data.md §2; see data.md §3 for the
+# rationale (options weighed, decision, why) behind every value below.
 cleaning:
-  remove_duplicates: true              # options: true | false
+  # --- Duplicates & leakage (P2.2 cross-split, P2.3 within-split) ---
+  remove_duplicates: true       # options: true | false  — drop exact-duplicate images (MD5 of pixel bytes)
+  dedup_scope: "global"         # options: global | per_split
+                                #   global    = dedup across ALL splits BEFORE splitting → removes leakage
+                                #   per_split = dedup within each split only → leakage NOT removed (baseline)
+
+  # --- Degenerate / non-face images (P2.5, P2.6) ---
+  drop_constant_images: true    # options: true | false  — drop std==0 blank/black frames (the 11 found)
+  min_contrast: 0               # options: 0 | 5 | 10     — also drop images with std below this (0 = keep all)
+  drop_non_faces: false         # options: true | false   — heuristic text/graphic removal (edge-dense + bright);
+                                #   OFF by default: risks false positives on legitimately high-detail faces
+
+  # --- Class imbalance (P2.1) ---
   handle_imbalance: true              # options: true | false
   imbalance_strategy: "class_weight"  # options: none | class_weight | oversample | undersample
+                                      #   (top ablation candidate — see data.md §3.2)
+
+  # --- Label noise (P2.7) ---
+  # No switch: residual label noise is ACCEPTED (data.md §3.6). Fought with early
+  # stopping + macro-F1, not by dropping ambiguous rows (over-cleaning risk).
 
 # ===== Preprocessing / feature engineering =====
 preprocessing:

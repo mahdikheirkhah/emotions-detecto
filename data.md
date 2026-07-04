@@ -285,5 +285,174 @@ Each problem is evidence-backed and maps to a **switchable `config.yaml` option*
 | **P2.7** | **Label noise** (wrong / conflicting labels) | §2.4 — ~65 % rater agreement; conflicting-label dupes | accept residual; early stopping + honest metrics |
 | **P2.8** | **Low resolution** (48×48 grayscale) | §1.3 — native format | accepted — upscaling adds no information |
 
-*§3 will propose and justify a strategy for each problem above; §4 documents the
+*§3 proposes and justifies a strategy for each problem above; §4 documents the
 concrete cleaning pipeline that implements the chosen switches.*
+
+---
+
+## 3. Cleaning strategies (options & decisions)
+
+For each problem in §2 we weigh the candidate fixes, record the **chosen** approach
+and *why*, and map it to the exact `config.yaml` key it will use. A guiding
+principle (CONTRIBUTING §8) runs through all of it: **prefer the cheapest fix that
+loses no signal, and never clean away information a CNN needs** (§3.7). Decisions
+marked 🔬 are *ablation candidates* — worth toggling later to measure their effect.
+
+---
+
+### 3.1 Duplicates & leakage — P2.2, P2.3
+
+| Strategy | Pros | Cons |
+|---|---|---|
+| **Keep all** | no data loss | repeated images get extra weight; **cross-split copies leak test answers** |
+| **Drop within each split only** | removes intra-split repetition | **leakage remains** — same image can still be in train *and* test |
+| **Global dedup before splitting** ✅ | removes repetition **and** leakage in one pass | slightly fewer images (~1,853 fewer) |
+
+**Decision:** **global dedup** — fingerprint every image (MD5 of pixel bytes),
+drop exact duplicates **across all splits before the train/val/test boundary is
+applied**. Leakage is non-negotiable (CONTRIBUTING §8): a training image that also
+sits in the test set makes the reported accuracy dishonest. The ~1,853 lost rows
+are a negligible fraction of 35,887 and carry no new information.
+
+- **Config:** `cleaning.remove_duplicates: true`, `cleaning.dedup_scope: "global"`
+- 🔬 *Ablation:* `dedup_scope: per_split` (or `remove_duplicates: false`) to measure
+  how much duplicates/leakage inflate the score.
+
+---
+
+### 3.2 Class imbalance — P2.1
+
+The core §2 problem (16.4×). Four remedies, compared for **this** dataset (35 k
+images, one dominant class, a CNN):
+
+| Strategy | How | Pros | Cons |
+|---|---|---|---|
+| **none** | train on raw distribution | simplest; a real baseline | model biased to Happy/Neutral; Disgust barely learned |
+| **class_weight** ✅ | scale each class's loss ∝ 1/frequency | **no data change, no information loss**, cheap, keeps all real examples | doesn't add minority *diversity* (still only 436 Disgust); very large weights can make gradients noisy |
+| **oversample** | duplicate/augment minorities to balance | model sees balanced batches | naive duplication → **overfitting** (memorises the 436 Disgust); augmentation only partly mitigates; longer epochs |
+| **undersample** | drop majorities to match the minority | fast, balanced | **catastrophic information loss** — matching Disgust (436) would cut Happy from ~7 k to 436, discarding ~27 k images a CNN needs |
+
+**Decision:** **`class_weight`**. For this dataset it is the only remedy that
+balances the loss **without destroying data** (undersample) or **inviting
+overfitting** (naive oversample). Undersampling is disqualified outright — a CNN
+starved to ~3 k total images will underfit badly. Class weighting reweights the
+gradient so a Disgust mistake costs ~16× a Happy mistake, using every real image
+exactly once.
+
+It pairs with two independent measures:
+- **Augmentation** (§ later) adds *genuine* minority diversity (flips/rotations of
+  the 436 Disgust images) — complementary to class weighting.
+- **Evaluation uses macro-F1 + per-class recall**, not accuracy, so the metric
+  itself is imbalance-robust regardless of the training remedy.
+
+- **Config:** `cleaning.handle_imbalance: true`, `cleaning.imbalance_strategy: "class_weight"`
+- 🔬 *Ablation (high priority):* compare `class_weight` vs `oversample` vs `none`.
+  `oversample` **with augmentation** is the most credible alternative.
+
+---
+
+### 3.3 Degenerate / constant images — P2.5
+
+The 11 `std == 0` images are totally black — zero information, guaranteed wrong
+whatever their label.
+
+| Strategy | Pros | Cons |
+|---|---|---|
+| **Keep** | no rule needed | feeds the model pure noise-labelled blanks |
+| **Drop `std == 0`** ✅ | removes provably useless rows; safe (a blank can't be any emotion) | none meaningful (11 rows) |
+| **Drop below a contrast threshold** | also removes near-blank frames | risks dropping legitimately dark faces |
+
+**Decision:** **drop `std == 0`**. This is the safest possible filter — a constant
+image cannot depict any expression. We keep the near-blank threshold available but
+default it **off** to avoid discarding genuine low-contrast faces (those are
+fixed by normalization instead, §3.5).
+
+- **Config:** `cleaning.drop_constant_images: true`, `cleaning.min_contrast: 0`
+- 🔬 *Ablation:* `min_contrast: 5` / `10` to test dropping near-blank frames.
+
+---
+
+### 3.4 Non-face images — P2.6
+
+The brightest crops are "image removed / unavailable" placeholder **text pages**,
+not faces — yet carry emotion labels.
+
+| Strategy | Pros | Cons |
+|---|---|---|
+| **Keep** | no rule | trains on mislabelled non-faces |
+| **Heuristic drop** (edge-dense + very bright) | removes obvious text/graphic crops | **false-positive risk** — a sharp, well-lit real face can also be edge-dense; threshold is fuzzy |
+| **Manual review** | precise | infeasible at 35 k scale |
+
+**Decision:** provide the heuristic filter but default it **OFF**
+(`drop_non_faces: false`). The population is small (tens of images, a subset of the
+84 bright), and an over-eager rule could delete real faces — a worse trade than
+leaving a handful of noisy rows that early stopping already tolerates. Many of
+these placeholders are **exact duplicates of each other**, so global dedup (§3.1)
+already removes most of them as a side effect.
+
+- **Config:** `cleaning.drop_non_faces: false`
+- 🔬 *Ablation:* `drop_non_faces: true` to measure whether removing them helps.
+
+---
+
+### 3.5 Brightness / contrast outliers — P2.4
+
+**Not a cleaning problem.** Dark, bright, and low-contrast images are *genuine
+faces with bad lighting* — the information is there, just poorly scaled. Dropping
+them would lose real examples. The right fix is **preprocessing**, not cleaning:
+
+- **Decision:** do **not** drop; normalize instead. Handled in §preprocessing via
+  `preprocessing.normalization` (`rescale | standardize | histogram_eq`), where
+  histogram equalization directly targets low-contrast faces.
+- **Config:** deferred to `preprocessing.normalization` (documented with the
+  preprocessing issues #20–#21). Listed here only to record *why cleaning leaves it
+  alone*.
+
+---
+
+### 3.6 Label noise & the non-cleanable — P2.7, P2.8
+
+- **Label noise (P2.7):** intrinsic and often *genuinely ambiguous* (Fear vs
+  Surprise). **Decision: accept the residual.** Hand-relabelling 35 k images is out
+  of scope, and aggressive removal would delete hard-but-valid examples. We fight it
+  with **early stopping** (don't memorise wrong labels) and **honest metrics**
+  (macro-F1, per-class recall). The one automatable slice — exact-duplicate images
+  with *conflicting* labels — is removed for free by global dedup (§3.1).
+- **Low resolution (P2.8):** 48×48 is the native format. **Decision: accept** —
+  upscaling adds no information.
+
+No `config.yaml` cleaning switch for either; recorded here to make the *decision to
+not act* explicit.
+
+---
+
+### 3.7 Decision summary
+
+| Problem | Chosen strategy | `config.yaml` | Ablation? |
+|---|---|---|---|
+| P2.2 leakage | global dedup before split | `remove_duplicates: true`, `dedup_scope: "global"` | 🔬 |
+| P2.3 within-split dupes | (same pass as P2.2) | `remove_duplicates: true` | 🔬 |
+| P2.1 imbalance | class-weighted loss | `handle_imbalance: true`, `imbalance_strategy: "class_weight"` | 🔬 (high) |
+| P2.5 constant images | drop `std == 0` | `drop_constant_images: true`, `min_contrast: 0` | 🔬 |
+| P2.6 non-faces | heuristic filter, default off | `drop_non_faces: false` | 🔬 |
+| P2.4 lighting outliers | normalize (not clean) | `preprocessing.normalization` | (preproc) |
+| P2.7 label noise | accept residual | — (early stopping + macro-F1) | — |
+| P2.8 low resolution | accept | — | — |
+
+---
+
+### 3.8 When *not* to clean
+
+Over-cleaning is its own failure mode:
+- **Every dropped row is lost training signal.** A CNN's appetite for data means the
+  bar for deletion is high — we only drop what is *provably* useless (constant
+  images) or *dangerous* (leakage), never merely *hard* (ambiguous labels, dark faces).
+- **Fuzzy filters cause collateral damage.** The non-face heuristic (§3.4) is off by
+  default precisely because its false positives would delete real faces.
+- **Fix in the right stage.** Lighting is a *scaling* problem (→ preprocessing), not a
+  *validity* problem (→ cleaning). Matching each issue to the correct stage avoids
+  destroying recoverable data.
+
+The net cleaning footprint is deliberately small: exact duplicates + 11 blank images,
+plus a loss-reweighting that removes nothing. Everything else is deferred to
+preprocessing or accepted as irreducible — and every choice is a toggle we can ablate.
