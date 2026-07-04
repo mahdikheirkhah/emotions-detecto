@@ -522,3 +522,156 @@ intact.
   `imbalance_strategy` can be swapped to measure its effect on macro-F1 later.
 
 *This closes the data loop: §2 problems → §3 strategies → §4 verified results.*
+
+---
+
+## 5. Feature engineering
+
+For an image dataset, "feature engineering" is **not** crafting new columns — it is
+transforming pixel intensities and synthesizing plausible variations. Three steps,
+each implemented behind the Ablation-Driven dispatch and each tied to a §2 finding:
+
+1. **Normalization** (#20) — put pixels in a small, centered range.
+2. **Contrast enhancement** (#21) — equalize poorly-lit faces.
+3. **Augmentation** (#22) — synthesize training variations to fight overfitting.
+
+The first two are **intensity transforms applied to every image** (train, val, test,
+and the live webcam feed); the third is **train-only**. The whole stage is toggleable
+(`stages.preprocessing`, `stages.augmentation`) so a raw-pixel baseline is one flag away.
+
+---
+
+### 5.1 Normalization — `preprocessing.normalization` (#20)
+
+| Option | Transform | Output |
+|---|---|---|
+| `none` | raw pixels (float32) | `[0, 255]` |
+| `rescale` *(default)* | `÷ 255` | `[0, 1]` |
+| `standardize` | `(x − μ) / σ` with **train** μ/σ | zero-mean/unit-var |
+
+**Why it suits FER-2013:** CNN gradients are best-conditioned when inputs are small
+and centered. Raw `[0, 255]` values produce large, poorly-scaled activations and
+slow, unstable convergence; `[0, 1]` (or z-scored) inputs converge faster and more
+stably. This is the baseline transform every model run uses.
+
+**No leakage:** `standardize` computes μ/σ **on the training split only**
+(`StandardizePreprocessor.fit`) and reuses them on val/test/live — measuring test
+statistics would leak information about the evaluation set (CONTRIBUTING §8).
+
+**Applied everywhere** — including live inference (§5.5). *Default:* `rescale`.
+
+---
+
+### 5.2 Contrast enhancement — `histogram_eq` / `clahe` (#21)
+
+| Option | Transform | Note |
+|---|---|---|
+| `histogram_eq` | global `cv2.equalizeHist` | remaps the intensity CDF toward uniform |
+| `clahe` | local, clipped (`cv2.createCLAHE`) | per-tile; `clahe_clip_limit`, `clahe_tile_grid` |
+
+Both run on **raw uint8 first, then rescale** to `[0, 1]` (composed via
+`SequentialPreprocessor`), so the model still receives floats.
+
+**Why it suits FER-2013 — direct §2 evidence:** §2.2 measured wide lighting variance
+(per-image contrast σ = 13.7) and flagged **93 dark, 84 bright, 15 low-contrast**
+images. Equalization spreads a low-contrast face's intensities across the full range,
+making the *same* expression look more uniform regardless of the original lighting —
+so the CNN spends capacity on expression, not on lighting invariance.
+
+**Global vs CLAHE:** global equalization is simplest but can over-amplify noise in
+flat regions; **CLAHE** equalizes in tiles with a clip limit, enhancing local detail
+without blowing up noise. CLAHE tends to win on faces with *uneven* lighting (one
+side shadowed); global wins on uniformly dim faces.
+
+**Applied everywhere, including live** — the identical contrast transform must run on
+each webcam face crop (#52), or train/inference distributions diverge (§5.5).
+*Default:* off (`normalization: rescale`) — it is a strong ablation candidate, not a
+default, because it can wash out already well-lit faces.
+
+---
+
+### 5.3 Augmentation — `augmentation.*` (#22)
+
+| Config key | Transform |
+|---|---|
+| `horizontal_flip: true` | random left-right flip |
+| `rotation_range: 10` | random rotation ±10° |
+| `zoom_range: 0.1` | random zoom ±10% |
+| `width_shift_range` / `height_shift_range: 0.1` | random translation ±10% |
+
+**Why it suits FER-2013:** overfitting is the central risk (the target is *>60 %
+accuracy without overfitting*). After cleaning, the training set is fixed and modest,
+and the imbalance (§2.1) leaves rare classes data-starved. Augmentation shows the
+model many plausible views of each face, teaching **invariance** (a smile is a smile,
+flipped or slightly rotated) and enlarging the *effective* training set — the most
+direct lever on the train/val overfitting gap.
+
+**Label-preserving only:** horizontal flip and *small* rotation/zoom/shift preserve
+the emotion. Vertical flips and large rotations are deliberately excluded — an
+upside-down face is not a natural face and would inject wrong-looking examples.
+
+**Train-only:** augmentation applies to **training batches only**; val/test/live are
+never augmented (the Keras layers are no-ops at `training=False`). Augmenting the
+evaluation set would measure the model on distorted, non-representative inputs.
+
+*Default:* on (`strategy: basic`).
+
+---
+
+### 5.4 Order of operations
+
+Per image, the FE stage composes as:
+
+```
+raw uint8  →  [contrast enhance? uint8→uint8]  →  normalize (→ float [0,1])  →  [augment? train only]
+```
+
+Contrast enhancement runs on uint8 *before* rescale (equalization needs integer
+intensity bins); augmentation runs last and only during training.
+
+---
+
+### 5.5 Inference contract (train ↔ live consistency)
+
+Whatever transforms the model trains on **must** run identically at inference — the
+webcam pipeline (#52) has to reproduce the exact preprocessing or the input
+distribution shifts and accuracy collapses.
+
+| Transform | Train | Val / Test | Live webcam |
+|---|---|---|---|
+| Normalization (`rescale` / `standardize`) | ✅ | ✅ | ✅ (same train μ/σ) |
+| Contrast (`histogram_eq` / `clahe`) | ✅ | ✅ | ✅ |
+| Augmentation (flip/rotate/zoom/shift) | ✅ | ❌ | ❌ |
+
+The rule: **intensity transforms travel with the model; augmentation does not.**
+
+---
+
+### 5.6 Considered and rejected / deferred
+
+| Idea | Decision | Why |
+|---|---|---|
+| Vertical flip | **rejected** | upside-down faces are unnatural — not label-preserving |
+| Large rotations (> 15°) | **rejected** | distorts expression geometry |
+| Heavy augmentation preset | **deferred** | `augmentation.strategy: heavy` reserved for a later ablation |
+| PCA / decomposition | **off** | CNNs learn their own spatial features; PCA discards them (`stages.decomposition: false`) |
+| Color transforms | **N/A** | FER-2013 is grayscale (§1.3) |
+| Upscaling > 48×48 | **rejected** | adds no information beyond the native resolution (§1.7) |
+
+---
+
+### 5.7 Ablation expectations
+
+Predicted effect of each toggle (to be confirmed by measurement, Phase 4+):
+
+| Toggle | Expected effect if enabled |
+|---|---|
+| `normalization: none → rescale` | **Large** — faster, more stable convergence; likely the single biggest "must-have" |
+| `normalization: rescale → standardize` | Small — marginal over rescale on already-bounded pixels |
+| `histogram_eq` / `clahe` | **Uncertain** — should help the ~0.4 % genuinely low-contrast faces, but may slightly hurt well-lit ones; net effect on 48×48 grayscale is often modest |
+| `augmentation: on` | **Large** — the main defense against overfitting; expected to close the train/val gap and lift macro-F1 on rare classes |
+| `imbalance: class_weight` (§3.2) | Moderate — lifts per-class recall on Disgust/Surprise, macro-F1 more than raw accuracy |
+
+**Prediction:** augmentation and basic rescaling are expected to matter most;
+contrast enhancement is the least certain and is exactly why it ships as a toggle
+rather than a default. *§5 records the why; `config.yaml` records the what.*
