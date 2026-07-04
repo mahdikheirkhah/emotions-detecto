@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import abc
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -94,4 +94,41 @@ class BaseCleaner(abc.ABC):
         Returns:
             A ``(images, labels)`` pair containing only the kept rows, in the
             original order.
+        """
+
+
+class BaseImbalanceStrategy(abc.ABC):
+    """Contract for one class-imbalance remedy (see data.md §3.2).
+
+    Concrete subclasses (``NoResample``, ``ClassWeightStrategy``,
+    ``Oversampler``, ``Undersampler``) each implement one strategy, selected via
+    ``cfg["cleaning"]["imbalance_strategy"]`` + dispatch.
+
+    **Train-only:** every strategy is applied to the *training split only* —
+    resampling or reweighting the validation/test sets would corrupt the
+    evaluation (CONTRIBUTING §8).
+
+    The unified return shape ``(X, y, class_weight)`` lets the trainer treat all
+    four strategies identically::
+
+        X_tr, y_tr, class_weight = strategy.apply(X_train, y_train)
+        model.fit(X_tr, y_tr, class_weight=class_weight)
+
+    Resampling strategies return the resampled arrays with ``class_weight=None``;
+    ``ClassWeightStrategy`` returns the data unchanged with a weight dict.
+    """
+
+    @abc.abstractmethod
+    def apply(
+        self, X: NDArray, y: NDArray
+    ) -> Tuple[NDArray, NDArray, Optional[Dict[int, float]]]:
+        """Apply the imbalance remedy to a *training* split.
+
+        Args:
+            X: Training image array of shape ``(N, ...)``.
+            y: Training integer label array of shape ``(N,)``.
+
+        Returns:
+            ``(X_out, y_out, class_weight)`` — ``class_weight`` is a
+            ``{class_index: weight}`` dict for ``model.fit`` or ``None``.
         """
