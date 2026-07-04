@@ -165,10 +165,15 @@ The 7 emotions are strongly imbalanced across the full 35,887 samples:
 
 *(notebooks `01_eda.ipynb` §7, `03_eda_image_grids_intensity.ipynb`)*
 
-- **Global intensity:** mean **129.5**, median **134**, std **65** on 0–255.
-  Mean < median ⇒ a **slight left-skew** (a tail toward dark pixels) — expected and
-  healthy for face crops (hair / shadow / background).
-- **Per-image lighting varies widely.** Flagging the Training split (28,709 images):
+- **Global intensity** (all pixels pooled): mean **129.5**, median **134**, std **65**
+  on 0–255. Mean < median ⇒ a **slight left-skew** (a tail toward dark pixels) —
+  expected and healthy for face crops (hair / shadow / background).
+- **Per-image statistics** (one value per image, then summarised across the Training
+  split): brightness **μ=129.5, σ=33.5**; contrast **μ=54.0, σ=13.7**. The wide σ on
+  both is the lighting variance — the same expression appears at very different
+  brightness/contrast levels. *(Note: per-image contrast mean 54 differs from the
+  global pooled std 65 — they measure different things.)*
+- **Per-image lighting extremes.** Flagging the Training split (28,709 images):
 
   | Flag | Threshold | Count | % |
   |---|---|---|---|
@@ -178,16 +183,19 @@ The 7 emotions are strongly imbalanced across the full 35,887 samples:
   | Constant | std == 0 | 11 | 0.04 % |
 
 - **Deep-dive triage** (§6b of notebook `03`, via Laplacian-variance *sharpness* and
-  Sobel *edge density*) splits these extremes into three distinct kinds:
-  - **degenerate** — totally black / constant frames (the 11 `std==0` images) → *drop*;
-  - **suspected non-face** — bright, edge-dense crops that are **blurry text /
-    watermarks**, not faces (a subset of the 84 bright images) → *note / drop*;
-  - **low-quality** — genuine faces that are just too dark or washed-out → *fixable by
-    normalization*, not dropping.
+  Sobel *edge density*) splits these extremes into three distinct kinds — **all three
+  confirmed visually on the real data**:
+  - **degenerate** — the 11 `std==0` images are **totally black** (brightness 0) → *drop*;
+  - **non-face** — the *brightest* images are not faces at all but **"image removed /
+    no longer available" placeholder pages** with rendered text (one legibly reads
+    *"…moved or …mage."*), scraped and given emotion labels. They are near-identical
+    to each other, so they also inflate the duplicate count → *drop*;
+  - **low-quality** — genuine faces that are merely too dark or washed-out → *fixable
+    by normalization*, not dropping.
 
 ![Global intensity histogram](results/eda/intensity_histogram_global.png)
 ![Brightness & contrast](results/eda/brightness_contrast_hist.png)
-![Brightest images, annotated](results/eda/flagged_brightest_annotated.png)
+![Brightest images are "image removed" placeholder text, not faces](results/eda/flagged_brightest.png)
 
 **Why it matters for a CNN:** convolution filters respond to *local intensity
 gradients*. If the same expression appears at wildly different brightness levels,
@@ -202,14 +210,17 @@ This is the empirical case for `preprocessing.normalization`.
 
 - **Exact duplicates:** the full dataset has **34,034 unique** pixel strings out of
   35,887 → **≈ 1,853 duplicate rows** (identical images).
-- **Cross-split duplicates = leakage risk.** An image present in *both* Training and
-  a test split means the model is evaluated on data it trained on, inflating the
-  metric (CONTRIBUTING §8). Notebook `04` §3 fingerprints every image with MD5 and
-  reports the exact cross-split count and which split-pairs leak.
-- **Conflicting-label duplicates** (same pixels, two different emotions) are an
-  automatable slice of label noise — notebook `04` §4 renders them.
+- **Cross-split duplicates = leakage — CONFIRMED present.** MD5 fingerprinting
+  (notebook `04` §3) finds images that appear in *both* Training and a test split.
+  The figure below shows real examples — the same face in Training + PublicTest /
+  PrivateTest, several bearing visible *"shutterstock"* watermarks. At least one image
+  appears in **all three** splits with a **conflicting label** (Fear in Training,
+  Surprise in the test splits). This is exactly the leakage CONTRIBUTING §8 forbids:
+  the model would be scored on data it trained on. **Dedup must happen before/at the
+  split.** *(Exact tally is printed by notebook `04` §2–§3.)*
+- **Conflicting-label duplicates** (same pixels, two different emotions) — see §2.4.
 
-![Cross-split leakage examples](results/eda/leakage_examples.png)
+![Cross-split leakage examples: same face in Training and test splits](results/eda/leakage_examples.png)
 
 ---
 
@@ -217,17 +228,21 @@ This is the empirical case for `preprocessing.normalization`.
 
 *(notebooks `01` §1.7, `04` §4–§5, `03` §6b)*
 
-- **Label noise is intrinsic.** FER-2013 was crowd-labelled from in-the-wild images;
-  inter-rater agreement is only ~65 %, so some labels are simply wrong. This **caps
-  achievable accuracy** — partly why the project target is *>60 %*, not *>95 %*.
-- **Non-face images exist.** The automatic Google-Images + Haar-cascade collection
-  passed some crops that are text/watermarks or not faces (see the "suspected
-  non-face" triage in §2.2). We *note* these rather than exhaustively hand-cleaning.
+- **Label noise is intrinsic — and directly observed.** FER-2013 was crowd-labelled
+  from in-the-wild images; inter-rater agreement is only ~65 %. The conflicting-label
+  figure below shows the automatable slice: identical images tagged with two different
+  emotions. Tellingly, most are **genuinely ambiguous expressions** — *Fear vs
+  Surprise* (wide eyes, hand to mouth), *Angry vs Sad* (a crying child), *Disgust vs
+  Surprise* — not careless errors. This **caps achievable accuracy**, which is partly
+  why the project target is *>60 %*, not *>95 %*.
+- **Non-face images exist — CONFIRMED.** The brightest crops (§2.2) are "image
+  removed / unavailable" placeholder text pages, not faces, yet carry emotion labels.
 - **Stance:** we **accept the residual noise** and fight it with early stopping (don't
   memorise wrong labels) and honest metrics, rather than over-cleaning — which risks
   discarding legitimately hard examples.
 
-![Spot-check per class](results/eda/spotcheck_per_class.png)
+![Same image, conflicting emotion labels — mostly genuinely ambiguous expressions](results/eda/conflicting_labels.png)
+![Spot-check: random samples per class](results/eda/spotcheck_per_class.png)
 
 ---
 
@@ -262,11 +277,11 @@ Each problem is evidence-backed and maps to a **switchable `config.yaml` option*
 | # | Problem | Evidence | Config lever |
 |---|---|---|---|
 | **P2.1** | **Class imbalance** (16.4× overall) | §2.1 — Disgust 1.5 % vs Happy 25 % | `cleaning.imbalance_strategy` (`none \| class_weight \| oversample \| undersample`) + macro-F1 metric |
-| **P2.2** | **Cross-split duplicates (leakage)** | §2.3 — MD5 cross-split matches | `cleaning.remove_duplicates` — **must drop** |
+| **P2.2** | **Cross-split duplicates (leakage)** | §2.3 — **confirmed**: same face in Training + test splits (fig.) | `cleaning.remove_duplicates` — **must drop before split** |
 | **P2.3** | **Within-split duplicates** | §2.3 — ≈ 1,853 duplicate rows | `cleaning.remove_duplicates` |
-| **P2.4** | **Lighting variance** (dark / bright / low-contrast) | §2.2 — 93 dark, 84 bright, 15 low-contrast | `preprocessing.normalization` (`rescale \| standardize \| histogram_eq`) |
-| **P2.5** | **Degenerate images** (blank / constant) | §2.2 — 11 `std==0` images | cleaning: drop degenerate rows |
-| **P2.6** | **Non-face images** (text / watermark) | §2.2 — "suspected non-face" triage | note / optional drop |
+| **P2.4** | **Lighting variance** (dark / bright / low-contrast) | §2.2 — 93 dark, 84 bright, 15 low-contrast; contrast σ=13.7 | `preprocessing.normalization` (`rescale \| standardize \| histogram_eq`) |
+| **P2.5** | **Degenerate images** (blank / constant) | §2.2 — 11 `std==0` images, all brightness 0 | cleaning: drop degenerate rows |
+| **P2.6** | **Non-face images** (placeholder text pages) | §2.2 — **confirmed**: "image removed" text crops labelled as emotions | cleaning: drop; also duplicates of each other |
 | **P2.7** | **Label noise** (wrong / conflicting labels) | §2.4 — ~65 % rater agreement; conflicting-label dupes | accept residual; early stopping + honest metrics |
 | **P2.8** | **Low resolution** (48×48 grayscale) | §1.3 — native format | accepted — upscaling adds no information |
 
