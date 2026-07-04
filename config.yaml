@@ -96,6 +96,15 @@ augmentation:
   width_shift_range: 0.1           # options: 0.0 | 0.1 | 0.2
   height_shift_range: 0.1          # options: 0.0 | 0.1 | 0.2
 
+# ===== Data decomposition (dimensionality reduction) =====
+# OFF by default: a CNN needs the raw 48×48 spatial layout PCA would destroy.
+# Turn on only for the linear/logistic baseline or as a teaching ablation (data.md §6).
+decomposition:
+  method: "pca"                    # options: pca
+  n_components: 0.95               # options: 0.95 | 0.99 | 50 | 100
+                                   #   float in (0,1) = keep that fraction of variance;
+                                   #   int = keep exactly that many components
+
 # ===== Model =====
 model:
   architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16

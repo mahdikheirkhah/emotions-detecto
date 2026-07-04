@@ -132,3 +132,40 @@ class BaseImbalanceStrategy(abc.ABC):
             ``(X_out, y_out, class_weight)`` — ``class_weight`` is a
             ``{class_index: weight}`` dict for ``model.fit`` or ``None``.
         """
+
+
+class BaseDecomposer(abc.ABC):
+    """Contract for an optional dimensionality-reduction step (see data.md §6).
+
+    Concrete subclasses (``IdentityReducer``, ``PcaReducer``) implement one
+    strategy, selected via the ``stages.decomposition`` toggle + config. Like the
+    preprocessors, statistics are fit on the **training split only** and reused on
+    val/test (CONTRIBUTING §8).
+
+    ``IdentityReducer`` (stage off) returns images unchanged so a CNN keeps the
+    2-D spatial layout its convolutions rely on; ``PcaReducer`` (stage on) flattens
+    and projects onto the top principal components — useful for a linear baseline.
+    """
+
+    @abc.abstractmethod
+    def fit(self, X: NDArray) -> "BaseDecomposer":
+        """Fit any decomposition statistics on the **training** data.
+
+        Args:
+            X: Training image array of shape ``(N, H, W)`` or ``(N, D)``.
+
+        Returns:
+            ``self`` so calls can be chained.
+        """
+
+    @abc.abstractmethod
+    def transform(self, X: NDArray) -> NDArray:
+        """Project *X* onto the fitted representation.
+
+        Args:
+            X: Image/feature array with the same convention as ``fit``.
+
+        Returns:
+            Either the unchanged array (identity) or a reduced ``(N, n_components)``
+            feature array (PCA).
+        """
