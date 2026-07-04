@@ -718,9 +718,22 @@ off.
 
 The **cumulative explained-variance curve** (`notebook 07 §2`) plots how much
 variance the first *k* components capture. You pick *k* at a target (e.g. 95 %) —
-the point past which extra components add little. FER-2013 pixels are highly
-redundant (neighbouring pixels correlate), so far fewer than 2304 components reach
-95 %, which is exactly why PCA compresses images well for a linear model.
+the point past which extra components add little. Measured on the FER-2013 training
+split (28,709 images):
+
+| Target variance | Components | Fraction of 2,304 pixels |
+|---|---|---|
+| 90 % | **103** | 4.5 % |
+| 95 % | **253** | 11.0 % |
+| 99 % | **880** | 38.2 % |
+
+Neighbouring pixels are strongly correlated, so 90 % of all variance lives in just
+103 of 2,304 dimensions — which is exactly why PCA compresses images well for a
+linear model. But the **top-2 components explain 38.7 %** of variance and the 2-D
+scatter (`notebook 07 §3`) shows **all seven emotions completely overlapping**:
+those directions encode global brightness/pose, not expression. That overlap is the
+visual proof that a linear model on PCA features cannot separate emotions — the CNN
+is needed.
 
 ### 6.5 Controls & expectation
 
