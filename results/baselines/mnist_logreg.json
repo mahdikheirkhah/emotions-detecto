@@ -1,0 +1,8 @@
+{
+  "dataset": "mnist",
+  "model": "logistic_regression",
+  "n_features": 784,
+  "n_train": 60000,
+  "test_accuracy": 0.9268,
+  "seed": 42
+}
