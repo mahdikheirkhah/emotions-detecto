@@ -55,7 +55,7 @@ stages:
   face_detection: true    # options: true | false
   train: true             # options: true | false
   evaluate: true          # options: true | false
-  tuning: false           # options: true | false  (true = scripts/train.py runs the
+  tuning: true           # options: true | false  (true = scripts/train.py runs the
                           #   hyperparameter search on the tuning.search_space FIRST,
                           #   applies the best config, THEN trains. Slow. scripts/tune.py
                           #   also runs the search standalone and persists winners to config.)
