@@ -137,6 +137,7 @@ model:
 callbacks:
   monitor: "val_loss"             # options: val_loss | val_accuracy  (metric all callbacks watch)
   early_stopping: true            # options: true | false  (false = ablate early stopping to SEE overfitting)
+  tensorboard: true               # options: true | false  (mandatory per subject; logs scalars + graph)
   early_stopping_patience: 10      # options: 5 | 10 | 15
   reduce_lr_patience: 5            # options: 3 | 5 | 7
   reduce_lr_factor: 0.5            # options: 0.2 | 0.5
