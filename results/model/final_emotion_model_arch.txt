@@ -1,0 +1,176 @@
+================================================================================
+ FINAL EMOTION MODEL — ARCHITECTURE DESIGN (DRAFT)
+================================================================================
+ Task     : classify a 48x48 grayscale face into 1 of 7 emotions
+ Default  : model.architecture = "vgg_small"   (config.yaml)
+ Status   : DRAFT — the "why" recorded here is expanded with the iteration
+            history in issue #45. Every knob below is a config.yaml option so it
+            can be ablated (CONTRIBUTING.md 3).
+--------------------------------------------------------------------------------
+
+1. INPUT
+--------------------------------------------------------------------------------
+   Shape (48, 48, 1) float32, normalized to [0, 1] (preprocessing.normalization).
+   Grayscale => 1 channel. The channel axis is explicit because Conv2D needs
+   (H, W, C). This is the exact tensor the pipeline emits (data.md 5, notebook 08).
+
+
+2. DESIGN PHILOSOPHY — VGG-style
+--------------------------------------------------------------------------------
+   We adopt the VGG idea: STACK SMALL 3x3 CONVOLUTIONS and DOUBLE THE CHANNELS as
+   spatial resolution halves. Rationale:
+
+   * Two stacked 3x3 convs have the same 5x5 receptive field as one 5x5 conv, but
+     use fewer parameters (2*9 = 18 vs 25 weights per channel-pair) and add an
+     extra non-linearity => more expressive per parameter.
+   * Doubling channels (32 -> 64 -> 128) as we pool keeps the compute per layer
+     roughly balanced and lets deeper layers represent more abstract features
+     (edges -> parts -> expressions) on a coarser grid.
+   * Overfitting is THE project risk (target: >60% test accuracy WITHOUT
+     overfitting). Every block ends in BatchNorm (steady training) + Dropout
+     (regularization); augmentation (data.md 5.3) and early stopping do the rest.
+
+
+3. THE BLOCK PATTERN
+--------------------------------------------------------------------------------
+   One repeated block, then a classifier head:
+
+       [ Conv3x3 -> BatchNorm -> ReLU ] x 2   (feature extraction)
+         -> MaxPool 2x2                        (downsample, invariance)
+         -> Dropout                            (regularization)
+
+   Repeated for num_conv_blocks (default 3), with the channel schedule
+   filters_start * 2^block:  32 -> 64 -> 128.
+
+   Head:
+       Flatten -> Dense(256) -> BatchNorm -> ReLU -> Dropout -> Dense(7, softmax)
+
+
+4. FULL LAYER TABLE (vgg_small: num_conv_blocks=3, filters_start=32)
+--------------------------------------------------------------------------------
+   Layer                    Output shape        Params     approx. RF
+   -----------------------  ------------------  ---------  ----------
+   Input                    (48, 48, 1)                0        1
+   Conv2D 3x3 /32 (same)    (48, 48, 32)             320        3
+   BatchNorm + ReLU         (48, 48, 32)             128
+   Conv2D 3x3 /32 (same)    (48, 48, 32)           9,248        5
+   BatchNorm + ReLU         (48, 48, 32)             128
+   MaxPool 2x2              (24, 24, 32)               0        6
+   Dropout                  (24, 24, 32)               0
+   Conv2D 3x3 /64 (same)    (24, 24, 64)          18,496       10
+   BatchNorm + ReLU         (24, 24, 64)             256
+   Conv2D 3x3 /64 (same)    (24, 24, 64)          36,928       14
+   BatchNorm + ReLU         (24, 24, 64)             256
+   MaxPool 2x2              (12, 12, 64)               0       16
+   Dropout                  (12, 12, 64)               0
+   Conv2D 3x3 /128 (same)   (12, 12, 128)         73,856       24
+   BatchNorm + ReLU         (12, 12, 128)            512
+   Conv2D 3x3 /128 (same)   (12, 12, 128)        147,584       32
+   BatchNorm + ReLU         (12, 12, 128)            512
+   MaxPool 2x2              (6, 6, 128)                0       36
+   Dropout                  (6, 6, 128)                0
+   Flatten                  (4608,)                    0
+   Dense 256                (256,)             1,179,904      whole face
+   BatchNorm + ReLU         (256,)                 1,024
+   Dropout                  (256,)                     0
+   Dense 7 (softmax)        (7,)                   1,799
+   -----------------------  ------------------  ---------
+   TOTAL                                        ~1,470,951
+
+   Note the receptive field grows 3 -> 5 -> ... -> 36 px across the conv stack, so
+   by the final block each unit "sees" almost the whole 48px face — enough context
+   to judge an expression (brow + eyes + mouth together).
+
+
+5. LAYER-TYPE RATIONALE (the audit asks WHY)
+--------------------------------------------------------------------------------
+   Conv2D 3x3     Learnable filters slid across the image (parameter sharing +
+                  locality). Early layers learn edges/strokes; deeper layers
+                  combine them into facial parts. 3x3 is the smallest kernel that
+                  still captures orientation — VGG's core choice.
+
+   MaxPooling 2x2 Halves H and W, keeping the strongest activation in each 2x2
+                  window. Buys small-shift invariance (a mouth 1px over is still a
+                  mouth) and cuts compute. MAX over AVERAGE because expression cues
+                  are sharp local features (a raised brow), and max preserves the
+                  peak response rather than blurring it.
+
+   ReLU           max(0, x). Non-saturating (no vanishing-gradient plateau like
+                  sigmoid/tanh), cheap, and induces sparse activations. The default
+                  for conv nets.
+
+   BatchNorm      Standardizes each layer's activations per mini-batch (zero mean,
+                  unit variance, then learned scale/shift). Smooths the loss
+                  landscape => higher learning rates, faster + steadier training,
+                  and a mild regularizing effect. Placed Conv -> BN -> ReLU (see 8).
+
+   Dropout        Randomly zeros a fraction of activations each step, so no unit
+                  can rely on a specific partner => the network learns redundant,
+                  generalizing features. Our primary in-network defense against
+                  overfitting. Lighter after conv blocks (dropout_rate/2), heavier
+                  before the final classifier (dropout_rate).
+
+   Softmax        Turns the 7 output logits into a probability distribution that
+                  sums to 1, paired with categorical_crossentropy loss.
+
+
+6. THE DENSE HEAD & THE OVERFITTING NOTE
+--------------------------------------------------------------------------------
+   Flatten -> Dense(256) alone is ~1.18M of the ~1.47M params (80% of the model).
+   That dense head is the main overfitting risk. Mitigations already in the design:
+   BN + Dropout on the head. Explicit ABLATION to test in #45:
+
+     * GlobalAveragePooling2D instead of Flatten  -> head shrinks from ~1.18M to
+       ~33k params, strong regularizer (dramatically fewer weights to overfit).
+
+   We start with Flatten (VGG-faithful, more capacity) and keep GAP as the first
+   lever to pull if the train/val gap is large.
+
+
+7. CANDIDATE ARCHITECTURES TO ABLATE  (model.architecture)
+--------------------------------------------------------------------------------
+   simple_cnn      2-3 conv layers, no BN, single dense head. The in-project
+                   baseline the deeper nets must beat (echoes the MNIST logreg vs
+                   CNN habit). Fast, underfits — the floor.
+
+   vgg_small       THIS design. Stacked 3x3 conv blocks + BN + Dropout, 32->64->128.
+                   Best accuracy/complexity trade-off for 48x48; our default.
+
+   resnet_mini     Adds residual (skip) connections so gradients flow through
+                   greater depth without vanishing. Worth trying if vgg_small
+                   plateaus and we want more depth; heavier to train.
+
+   transfer_vgg16  Pretrained ImageNet VGG16 backbone, fine-tuned. Powerful, but a
+                   mismatch here (ImageNet is 224x224 RGB natural images; ours is
+                   48x48 grayscale faces) — needs upscaling + channel replication.
+                   Kept as an option, not the default.
+
+
+8. CONFIG MAPPING  (config.yaml -> what it controls)
+--------------------------------------------------------------------------------
+   model.architecture     which builder (simple_cnn | vgg_small | resnet_mini |
+                          transfer_vgg16) — dispatched in #34
+   model.num_conv_blocks  how many conv/pool blocks (2 | 3 | 4) -> depth + final RF
+   model.filters_start    channels in block 1 (32 | 64); doubles each block
+   model.dropout_rate     head dropout (0.3 | 0.4 | 0.5); blocks use half of it
+   model.optimizer        adam | sgd | rmsprop
+   model.learning_rate    0.01 | 0.001 | 0.0001
+   model.loss             categorical_crossentropy | focal_loss
+   model.num_classes      7 (fixed)
+
+   BN+ReLU ordering, and the exact head, are set in the builder (#33/#34).
+
+
+9. TRAINING TARGETS
+--------------------------------------------------------------------------------
+   * Test accuracy > 60% (CONTRIBUTING.md 8), reported with macro-F1 + per-class
+     recall (imbalance-aware, data.md 3.2).
+   * No overfitting: train and val loss must track together; stop at the val-loss
+     elbow via early stopping (callbacks.early_stopping_patience).
+   * Full reproducibility: all randomness seeded from global.seed.
+
+================================================================================
+ This is the DRAFT. #33 builds vgg_small from these decisions; #34 makes the
+ builder config-dispatched; #45 appends the iteration history (what we actually
+ tried and what moved the metric).
+================================================================================
