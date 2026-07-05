@@ -13,42 +13,9 @@ from typing import Any, Tuple
 
 from src.emotion_detector.models.base import BaseModelBuilder
 from src.emotion_detector.models.blocks import conv_block
+from src.emotion_detector.models.compile import compile_model
 from src.emotion_detector.utils.dispatch import dispatch
 from src.emotion_detector.utils.logging import logger
-
-
-def _make_optimizer(name: str, learning_rate: float) -> Any:
-    """Build a Keras optimizer from a config name + learning rate."""
-    from tensorflow import keras
-
-    registry = {
-        "adam": lambda: keras.optimizers.Adam(learning_rate),
-        "sgd": lambda: keras.optimizers.SGD(learning_rate),
-        "rmsprop": lambda: keras.optimizers.RMSprop(learning_rate),
-    }
-    return dispatch(name, registry)
-
-
-def _resolve_loss(name: str) -> str:
-    """Map a config loss name to a Keras loss (focal_loss lands in a later issue)."""
-    if name == "categorical_crossentropy":
-        return "categorical_crossentropy"
-    raise ValueError(
-        f"Unsupported model.loss '{name}'. Only 'categorical_crossentropy' is "
-        "implemented so far (focal_loss is a later issue)."
-    )
-
-
-def _compile(model: Any, cfg: dict) -> Any:
-    """Compile *model* with the optimizer/loss/metrics from config."""
-    m = cfg["model"]
-    optimizer = _make_optimizer(m["optimizer"], m["learning_rate"])
-    model.compile(
-        optimizer=optimizer,
-        loss=_resolve_loss(m["loss"]),
-        metrics=["accuracy"],
-    )
-    return model
 
 
 class SimpleCnnBuilder(BaseModelBuilder):
@@ -76,7 +43,7 @@ class SimpleCnnBuilder(BaseModelBuilder):
         x = layers.Dropout(self._dropout)(x)
         out = layers.Dense(num_classes, activation="softmax")(x)
         model = keras.Model(inp, out, name="simple_cnn")
-        return _compile(model, self._cfg)
+        return compile_model(model, self._cfg)
 
 
 class VggSmallBuilder(BaseModelBuilder):
@@ -121,7 +88,7 @@ class VggSmallBuilder(BaseModelBuilder):
         x = layers.Dropout(self._dropout)(x)  # heavier dropout before the classifier
         out = layers.Dense(num_classes, activation="softmax")(x)
         model = keras.Model(inp, out, name="vgg_small")
-        return _compile(model, self._cfg)
+        return compile_model(model, self._cfg)
 
 
 def build_model(cfg: dict, summary: bool = True) -> Any:
