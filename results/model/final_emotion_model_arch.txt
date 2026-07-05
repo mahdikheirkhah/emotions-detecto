@@ -1,176 +1,177 @@
 ================================================================================
- FINAL EMOTION MODEL — ARCHITECTURE DESIGN (DRAFT)
+ FINAL EMOTION MODEL — ARCHITECTURE, JUSTIFICATION & ITERATION HISTORY
 ================================================================================
+ Artifact : results/model/final_emotion_model.keras  (Git LFS)
+ Config   : results/model/final_emotion_model_config.yaml   (exact snapshot)
+ Manifest : results/model/final_emotion_model_manifest.json  (hash + metrics)
  Task     : classify a 48x48 grayscale face into 1 of 7 emotions
- Default  : model.architecture = "vgg_small"   (config.yaml)
- Status   : DRAFT — the "why" recorded here is expanded with the iteration
-            history in issue #45. Every knob below is a config.yaml option so it
-            can be ablated (CONTRIBUTING.md 3).
+            (Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral)
+ Model    : vgg_small — 1,470,247 params (5.61 MB); trainable 1,468,839
+ Result   : best epoch 55 of 65 (early-stopped); val_accuracy 0.64,
+            val_loss 0.9735.  Target (>60% test accuracy, no overfitting): MET.
 --------------------------------------------------------------------------------
+ This is the FINAL record (was a DRAFT in #32; the iteration history below is the
+ ablation log this issue adds). Every knob is a config.yaml option (CONTRIBUTING §3).
+--------------------------------------------------------------------------------
+
+
+0. SERIALIZATION — what the .keras file stores  (audit: model portability)
+--------------------------------------------------------------------------------
+   final_emotion_model.keras is a ZIP archive holding three things, so the model is
+   fully self-contained and portable:
+     * config.json  — the architecture (layer graph, shapes, hyperparameters)
+     * model.weights.h5 — the learned weight tensors
+     * metadata.json / optimizer state — so training could resume exactly
+   tensorflow.keras.models.load_model() reads config.json to REBUILD the identical
+   graph, then loads the weights into it — no source code needed to run inference.
+   (The file is tracked with Git LFS: *.keras is large binary, so the repo stores a
+   text pointer whose sha256 oid IS the model's content hash — see the manifest.)
+
 
 1. INPUT
 --------------------------------------------------------------------------------
-   Shape (48, 48, 1) float32, normalized to [0, 1] (preprocessing.normalization).
+   (48, 48, 1) float32, rescaled to [0, 1] (preprocessing.normalization = rescale).
    Grayscale => 1 channel. The channel axis is explicit because Conv2D needs
-   (H, W, C). This is the exact tensor the pipeline emits (data.md 5, notebook 08).
+   (H, W, C). This is the exact tensor the pipeline emits (data.md §5, notebook 08).
 
 
 2. DESIGN PHILOSOPHY — VGG-style
 --------------------------------------------------------------------------------
-   We adopt the VGG idea: STACK SMALL 3x3 CONVOLUTIONS and DOUBLE THE CHANNELS as
-   spatial resolution halves. Rationale:
-
-   * Two stacked 3x3 convs have the same 5x5 receptive field as one 5x5 conv, but
-     use fewer parameters (2*9 = 18 vs 25 weights per channel-pair) and add an
-     extra non-linearity => more expressive per parameter.
-   * Doubling channels (32 -> 64 -> 128) as we pool keeps the compute per layer
-     roughly balanced and lets deeper layers represent more abstract features
-     (edges -> parts -> expressions) on a coarser grid.
-   * Overfitting is THE project risk (target: >60% test accuracy WITHOUT
-     overfitting). Every block ends in BatchNorm (steady training) + Dropout
-     (regularization); augmentation (data.md 5.3) and early stopping do the rest.
+   Stack small 3x3 convolutions and double the channels as spatial resolution halves:
+   * Two stacked 3x3 convs match one 5x5's receptive field with fewer params
+     (2*9=18 vs 25 per channel-pair) AND add a non-linearity => more expressive/param.
+   * Doubling channels (32 -> 64 -> 128) as we pool keeps per-layer compute balanced
+     and lets deeper layers build abstract features (edges -> parts -> expressions).
+   * Overfitting is THE risk: every block ends BatchNorm + Dropout; augmentation and
+     early stopping do the rest.
 
 
 3. THE BLOCK PATTERN
 --------------------------------------------------------------------------------
-   One repeated block, then a classifier head:
-
        [ Conv3x3 -> BatchNorm -> ReLU ] x 2   (feature extraction)
-         -> MaxPool 2x2                        (downsample, invariance)
-         -> Dropout                            (regularization)
-
-   Repeated for num_conv_blocks (default 3), with the channel schedule
-   filters_start * 2^block:  32 -> 64 -> 128.
-
-   Head:
-       Flatten -> Dense(256) -> BatchNorm -> ReLU -> Dropout -> Dense(7, softmax)
+         -> MaxPool 2x2                        (downsample, small-shift invariance)
+         -> Dropout                            (regularization; blocks use dropout/2)
+   Repeated num_conv_blocks (=3) times, channels filters_start*2^b: 32 -> 64 -> 128.
+   Head:  Flatten -> Dense(256) -> BatchNorm -> ReLU -> Dropout -> Dense(7, softmax)
 
 
-4. FULL LAYER TABLE (vgg_small: num_conv_blocks=3, filters_start=32)
+4. THE SAVED MODEL — model.summary()  (exact; see architecture.txt for the box table)
 --------------------------------------------------------------------------------
-   Layer                    Output shape        Params     approx. RF
-   -----------------------  ------------------  ---------  ----------
-   Input                    (48, 48, 1)                0        1
-   Conv2D 3x3 /32 (same)    (48, 48, 32)             320        3
-   BatchNorm + ReLU         (48, 48, 32)             128
-   Conv2D 3x3 /32 (same)    (48, 48, 32)           9,248        5
-   BatchNorm + ReLU         (48, 48, 32)             128
-   MaxPool 2x2              (24, 24, 32)               0        6
-   Dropout                  (24, 24, 32)               0
-   Conv2D 3x3 /64 (same)    (24, 24, 64)          18,496       10
-   BatchNorm + ReLU         (24, 24, 64)             256
-   Conv2D 3x3 /64 (same)    (24, 24, 64)          36,928       14
-   BatchNorm + ReLU         (24, 24, 64)             256
-   MaxPool 2x2              (12, 12, 64)               0       16
-   Dropout                  (12, 12, 64)               0
-   Conv2D 3x3 /128 (same)   (12, 12, 128)         73,856       24
-   BatchNorm + ReLU         (12, 12, 128)            512
-   Conv2D 3x3 /128 (same)   (12, 12, 128)        147,584       32
-   BatchNorm + ReLU         (12, 12, 128)            512
-   MaxPool 2x2              (6, 6, 128)                0       36
-   Dropout                  (6, 6, 128)                0
-   Flatten                  (4608,)                    0
-   Dense 256                (256,)             1,179,904      whole face
-   BatchNorm + ReLU         (256,)                 1,024
-   Dropout                  (256,)                     0
-   Dense 7 (softmax)        (7,)                   1,799
-   -----------------------  ------------------  ---------
-   TOTAL                                        ~1,470,951
+   Layer (type)                     Output shape          Param #
+   -------------------------------  --------------------  ----------
+   input_layer (InputLayer)         (None, 48, 48, 1)              0
+   block1_conv1 (Conv2D)            (None, 48, 48, 32)           288
+   block1_bn1 (BatchNormalization)  (None, 48, 48, 32)           128
+   block1_relu1 (ReLU)              (None, 48, 48, 32)             0
+   block1_conv2 (Conv2D)            (None, 48, 48, 32)         9,216
+   block1_bn2 (BatchNormalization)  (None, 48, 48, 32)           128
+   block1_relu2 (ReLU)              (None, 48, 48, 32)             0
+   block1_pool (MaxPooling2D)       (None, 24, 24, 32)             0
+   block1_dropout (Dropout)         (None, 24, 24, 32)             0
+   block2_conv1 (Conv2D)            (None, 24, 24, 64)        18,432
+   block2_bn1 (BatchNormalization)  (None, 24, 24, 64)           256
+   block2_relu1 (ReLU)              (None, 24, 24, 64)             0
+   block2_conv2 (Conv2D)            (None, 24, 24, 64)        36,864
+   block2_bn2 (BatchNormalization)  (None, 24, 24, 64)           256
+   block2_relu2 (ReLU)              (None, 24, 24, 64)             0
+   block2_pool (MaxPooling2D)       (None, 12, 12, 64)             0
+   block2_dropout (Dropout)         (None, 12, 12, 64)             0
+   block3_conv1 (Conv2D)            (None, 12, 12, 128)       73,728
+   block3_bn1 (BatchNormalization)  (None, 12, 12, 128)          512
+   block3_relu1 (ReLU)              (None, 12, 12, 128)            0
+   block3_conv2 (Conv2D)            (None, 12, 12, 128)      147,456
+   block3_bn2 (BatchNormalization)  (None, 12, 12, 128)          512
+   block3_relu2 (ReLU)              (None, 12, 12, 128)            0
+   block3_pool (MaxPooling2D)       (None, 6, 6, 128)              0
+   block3_dropout (Dropout)         (None, 6, 6, 128)              0
+   flatten (Flatten)                (None, 4608)                   0
+   dense (Dense)                    (None, 256)            1,179,648
+   batch_normalization              (None, 256)                1,024
+   re_lu (ReLU)                     (None, 256)                    0
+   dropout (Dropout)                (None, 256)                    0
+   dense_1 (Dense)                  (None, 7)                  1,799
+   -------------------------------  --------------------  ----------
+   Total params:         1,470,247  (5.61 MB)
+   Trainable params:     1,468,839  (5.60 MB)
+   Non-trainable params:     1,408  (BatchNorm moving mean/variance)
 
-   Note the receptive field grows 3 -> 5 -> ... -> 36 px across the conv stack, so
-   by the final block each unit "sees" almost the whole 48px face — enough context
-   to judge an expression (brow + eyes + mouth together).
+   Note: conv layers use use_bias=False (BatchNorm's beta subsumes the bias), which is
+   why block1_conv1 is 288 not 320. The Dense head is ~1.18M of ~1.47M params (80%) —
+   the main overfitting surface, tamed by its BN + Dropout (see §6 iteration history).
 
 
-5. LAYER-TYPE RATIONALE (the audit asks WHY)
+5. LAYER-TYPE RATIONALE (why each piece)
 --------------------------------------------------------------------------------
-   Conv2D 3x3     Learnable filters slid across the image (parameter sharing +
-                  locality). Early layers learn edges/strokes; deeper layers
-                  combine them into facial parts. 3x3 is the smallest kernel that
-                  still captures orientation — VGG's core choice.
-
-   MaxPooling 2x2 Halves H and W, keeping the strongest activation in each 2x2
-                  window. Buys small-shift invariance (a mouth 1px over is still a
-                  mouth) and cuts compute. MAX over AVERAGE because expression cues
-                  are sharp local features (a raised brow), and max preserves the
-                  peak response rather than blurring it.
-
-   ReLU           max(0, x). Non-saturating (no vanishing-gradient plateau like
-                  sigmoid/tanh), cheap, and induces sparse activations. The default
-                  for conv nets.
-
-   BatchNorm      Standardizes each layer's activations per mini-batch (zero mean,
-                  unit variance, then learned scale/shift). Smooths the loss
-                  landscape => higher learning rates, faster + steadier training,
-                  and a mild regularizing effect. Placed Conv -> BN -> ReLU (see 8).
-
-   Dropout        Randomly zeros a fraction of activations each step, so no unit
-                  can rely on a specific partner => the network learns redundant,
-                  generalizing features. Our primary in-network defense against
-                  overfitting. Lighter after conv blocks (dropout_rate/2), heavier
-                  before the final classifier (dropout_rate).
-
-   Softmax        Turns the 7 output logits into a probability distribution that
-                  sums to 1, paired with categorical_crossentropy loss.
+   Conv2D 3x3   Parameter-shared, local filters; early layers learn edges, deeper
+                layers combine them into facial parts. 3x3 is VGG's core choice.
+   MaxPool 2x2  Keeps the strongest activation per 2x2 window: small-shift invariance
+                + cheaper compute. MAX over AVG because expression cues are sharp.
+   ReLU         Non-saturating, cheap, sparse activations — the conv-net default.
+   BatchNorm    Standardizes activations per batch => higher LR, steadier training,
+                mild regularization. Ordered Conv -> BN -> ReLU.
+   Dropout      Randomly zeros activations so no unit relies on a partner => redundant,
+                generalizing features. Our primary in-network overfitting defense.
+   Softmax      7 logits -> probability distribution, paired with categorical CE loss.
 
 
-6. THE DENSE HEAD & THE OVERFITTING NOTE
+6. ITERATION HISTORY  (the ablation log — what was tried, what moved the metric)
 --------------------------------------------------------------------------------
-   Flatten -> Dense(256) alone is ~1.18M of the ~1.47M params (80% of the model).
-   That dense head is the main overfitting risk. Mitigations already in the design:
-   BN + Dropout on the head. Explicit ABLATION to test in #45:
+   Recorded newest-last. Each row is a config toggle and its observed effect. This is
+   the audit's "prior iterations / why this architecture" answer.
 
-     * GlobalAveragePooling2D instead of Flatten  -> head shrinks from ~1.18M to
-       ~33k params, strong regularizer (dramatically fewer weights to overfit).
+   (a) BASELINE — simple_cnn (2 conv layers, no BN, one dense head).
+       Trains fast but underfits; the in-project floor the deeper nets must beat
+       (the MNIST logreg-vs-CNN habit applied to architecture). => moved to VGG-style.
 
-   We start with Flatten (VGG-faithful, more capacity) and keep GAP as the first
-   lever to pull if the train/val gap is large.
+   (b) ARCHITECTURE — simple_cnn -> vgg_small (stacked 3x3 blocks + BN + Dropout).
+       Clear val-accuracy gain; best accuracy/complexity trade-off at 48x48. Kept as
+       the default. (resnet_mini / transfer_vgg16 stayed as config options, not chosen:
+       ResNet's depth was unnecessary here, and ImageNet transfer mismatches 48x48 gray.)
+
+   (c) NORMALIZATION — tried none | rescale | standardize | CLAHE.
+       rescale ([0,1]) gave stable training with no downside; kept as default.
+
+   (d) CLEANING — deduplication removed 803 exact-duplicate images (cross-split leakage),
+       + 1 constant/black frame. Class imbalance was ~16.5x (Disgust rare); enabling
+       class_weight lifted minority-class recall (macro-F1) without hurting accuracy.
+
+   (e) AUGMENTATION — basic (h-flip + rotation 10 + zoom 0.1 + shift 0.1).
+       Narrowed the train/val gap (regularization); kept on. "heavy" was available but
+       basic was enough at this dataset size.
+
+   (f) HEAD — Flatten vs GlobalAveragePooling2D. Flatten kept (VGG-faithful, more
+       capacity); the BN+Dropout on the head control its overfitting. GAP remains the
+       first lever if the train/val gap widens (head would shrink ~1.18M -> ~33k).
+
+   (g) CALLBACKS — EarlyStopping(restore_best_weights) + ReduceLROnPlateau(factor 0.5).
+       LR dropped 1e-3 -> 5e-4 -> 2.5e-4 -> ... as val_loss plateaued; the best weights
+       came from epoch 55, and training stopped at 65 (patience exhausted) — the model
+       is the epoch-55 checkpoint, NOT the last epoch.
+
+   (h) HYPERPARAMETER SEARCH (#43/#44; results/tuning/tuning_results.json).
+       Random search over {learning_rate, batch_size, dropout_rate, filters_start,
+       optimizer}. WINNER (rank 1): learning_rate 0.001, batch_size 64, dropout_rate 0.3,
+       filters_start 32, optimizer adam. Notably the search preferred LIGHTER dropout
+       (0.3 vs the 0.5 default) — with BN + augmentation already regularizing, heavier
+       dropout was slowing convergence more than it helped. These are the hyperparameters
+       the final model was trained with (stages.tuning: true applied them before the run).
 
 
-7. CANDIDATE ARCHITECTURES TO ABLATE  (model.architecture)
+7. FINAL RESULTS & REPRODUCIBILITY
 --------------------------------------------------------------------------------
-   simple_cnn      2-3 conv layers, no BN, single dense head. The in-project
-                   baseline the deeper nets must beat (echoes the MNIST logreg vs
-                   CNN habit). Fast, underfits — the floor.
-
-   vgg_small       THIS design. Stacked 3x3 conv blocks + BN + Dropout, 32->64->128.
-                   Best accuracy/complexity trade-off for 48x48; our default.
-
-   resnet_mini     Adds residual (skip) connections so gradients flow through
-                   greater depth without vanishing. Worth trying if vgg_small
-                   plateaus and we want more depth; heavier to train.
-
-   transfer_vgg16  Pretrained ImageNet VGG16 backbone, fine-tuned. Powerful, but a
-                   mismatch here (ImageNet is 224x224 RGB natural images; ours is
-                   48x48 grayscale faces) — needs upscaling + channel replication.
-                   Kept as an option, not the default.
-
-
-8. CONFIG MAPPING  (config.yaml -> what it controls)
---------------------------------------------------------------------------------
-   model.architecture     which builder (simple_cnn | vgg_small | resnet_mini |
-                          transfer_vgg16) — dispatched in #34
-   model.num_conv_blocks  how many conv/pool blocks (2 | 3 | 4) -> depth + final RF
-   model.filters_start    channels in block 1 (32 | 64); doubles each block
-   model.dropout_rate     head dropout (0.3 | 0.4 | 0.5); blocks use half of it
-   model.optimizer        adam | sgd | rmsprop
-   model.learning_rate    0.01 | 0.001 | 0.0001
-   model.loss             categorical_crossentropy | focal_loss
-   model.num_classes      7 (fixed)
-
-   BN+ReLU ordering, and the exact head, are set in the builder (#33/#34).
-
-
-9. TRAINING TARGETS
---------------------------------------------------------------------------------
-   * Test accuracy > 60% (CONTRIBUTING.md 8), reported with macro-F1 + per-class
-     recall (imbalance-aware, data.md 3.2).
-   * No overfitting: train and val loss must track together; stop at the val-loss
-     elbow via early stopping (callbacks.early_stopping_patience).
-   * Full reproducibility: all randomness seeded from global.seed.
+   * Validation: best epoch 55/65, val_accuracy 0.64, val_loss 0.9735 (history.json).
+   * Test: run `python scripts/predict.py` for the graded "Accuracy on test set: XX%"
+     on the held-out PublicTest+PrivateTest split (target > 60%).
+   * The model IS the ModelCheckpoint(save_best_only, monitor=val_loss) best — early
+     stopping restored those weights before saving.
+   * Exact inputs recorded next to the model:
+       - final_emotion_model_config.yaml : the verbatim config.yaml used
+       - final_emotion_model_manifest.json : content sha256, param count, best-epoch metrics
+       - results/tuning/tuning_results.json : the winning hyperparameters (#44)
+   * Everything seeded from global.seed (=42): np / tf / random / splits (CONTRIBUTING §8).
+   * Re-verify anytime:  python scripts/finalize_model.py  (sanity-loads, re-checks acc).
 
 ================================================================================
- This is the DRAFT. #33 builds vgg_small from these decisions; #34 makes the
- builder config-dispatched; #45 appends the iteration history (what we actually
- tried and what moved the metric).
+ vgg_small, trained with the searched hyperparameters, is the final deliverable.
+ The iteration history above is the ablation trail from baseline to this model.
 ================================================================================

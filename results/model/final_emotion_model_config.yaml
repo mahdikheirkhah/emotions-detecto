@@ -1,0 +1,242 @@
+# =============================================================
+# Emotions Detecto — Ablation-Driven Configuration
+# =============================================================
+# Every value has an `# options:` comment listing all valid
+# choices. Change exactly ONE value at a time to run an
+# ablation. Never hardcode a decision in source code.
+
+# ===== Global =====
+global:
+  seed: 42                         # options: any integer — fixes numpy/tf/random for reproducibility
+  log_level: "INFO"                # options: DEBUG | INFO | WARNING | ERROR
+
+# ===== Dataset =====
+# Zip extracts to:
+#   train.csv              — emotion, pixels              (no split column; all training rows)
+#   test.csv               — pixels only                  (unlabelled, not used in pipeline)
+#   test_with_emotions.csv — emotion, pixels              (held-out evaluation set)
+#   icml_face_data.csv     — emotion, usage, pixels       (has Training/PublicTest/PrivateTest split column)
+#   fer2013.tar.gz         → fer2013/fer2013.csv          (same schema as icml_face_data.csv)
+data:
+  url: "https://assets.01-edu.org/ai-branch/project3/emotions-detector.zip"
+  zip_name: "emotions-detector.zip"
+  expected_files:          # minimum files verified after extraction
+    - "train.csv"
+    - "test.csv"
+    - "test_with_emotions.csv"
+    - "icml_face_data.csv"
+  primary_csv: "icml_face_data.csv"  # split-aware file: emotion + usage + pixels
+  train_csv: "train.csv"             # flat training file: emotion + pixels (no Usage col)
+  test_csv: "test_with_emotions.csv" # held-out evaluation: emotion + pixels
+
+# ===== Paths =====
+paths:
+  data_dir: "data/"
+  results_dir: "results/"
+  model_dir: "results/model/"
+  preprocessing_test_dir: "results/preprocessing_test/"
+  logs_dir: "logs/"
+  model_save_path: "results/model/final_emotion_model.keras"
+  arch_txt_path: "results/model/architecture.txt"
+  learning_curves_path: "results/model/learning_curves.png"
+  tensorboard_dir: "logs/tensorboard/"
+  # Transfer-learning artifacts (used only when model.architecture is a transfer_* option),
+  # kept separate so a transfer run never overwrites the from-scratch model above.
+  pretrained_model_save_path: "results/model/pre_trained_model.keras"
+  pretrained_arch_txt_path: "results/model/pre_trained_model_architecture.txt"
+  tflite_model_save_path: "results/model/final_emotion_model.tflite"  # quantized artifact (#47)
+  pruned_model_save_path: "results/model/pruned_emotion_model.keras"  # sparse artifact (#48)
+
+# ===== Pipeline stage toggles (ablation switches) =====
+# Set a stage to false to measure what it contributes to accuracy.
+stages:
+  cleaning: true          # options: true | false
+  preprocessing: true     # options: true | false
+  augmentation: true      # options: true | false  (off = raw-pixel baseline)
+  decomposition: false    # options: true | false  (PCA; usually off for a CNN)
+  face_detection: true    # options: true | false
+  train: true             # options: true | false
+  evaluate: true          # options: true | false
+  tuning: true           # options: true | false  (true = scripts/train.py runs the
+                          #   hyperparameter search on the tuning.search_space FIRST,
+                          #   applies the best config, THEN trains. Slow. scripts/tune.py
+                          #   also runs the search standalone and persists winners to config.)
+
+# ===== Data cleaning =====
+# Each option fixes a numbered problem from data.md §2; see data.md §3 for the
+# rationale (options weighed, decision, why) behind every value below.
+cleaning:
+  # --- Duplicates & leakage (P2.2 cross-split, P2.3 within-split) ---
+  remove_duplicates: true       # options: true | false  — drop exact-duplicate images (MD5 of pixel bytes)
+  dedup_scope: "global"         # options: global | per_split
+                                #   global    = dedup across ALL splits BEFORE splitting → removes leakage
+                                #   per_split = dedup within each split only → leakage NOT removed (baseline)
+
+  # --- Degenerate / non-face images (P2.5, P2.6) ---
+  drop_constant_images: true    # options: true | false  — drop std==0 blank/black frames (the 11 found)
+  min_contrast: 0               # options: 0 | 5 | 10     — also drop images with std below this (0 = keep all)
+  drop_non_faces: false         # options: true | false   — heuristic text/graphic removal (edge-dense + bright);
+                                #   OFF by default: risks false positives on legitimately high-detail faces
+
+  # --- Class imbalance (P2.1) ---
+  handle_imbalance: true              # options: true | false
+  imbalance_strategy: "class_weight"  # options: none | class_weight | oversample | undersample
+                                      #   (top ablation candidate — see data.md §3.2)
+
+  # --- Label noise (P2.7) ---
+  # No switch: residual label noise is ACCEPTED (data.md §3.6). Fought with early
+  # stopping + macro-F1, not by dropping ambiguous rows (over-cleaning risk).
+
+# ===== Preprocessing / feature engineering =====
+preprocessing:
+  image_size: 48                   # options: 48 | 64 | 96  (FER-2013 native is 48)
+  grayscale: true                  # options: true | false
+  normalization: "rescale"         # options: none | rescale | standardize | histogram_eq | clahe
+  histogram_equalization: false    # options: true | false  (applied before normalization)
+  clahe_clip_limit: 2.0            # options: 1.0 | 2.0 | 4.0  (CLAHE contrast clip; clahe only)
+  clahe_tile_grid: 8               # options: 4 | 8 | 16       (CLAHE N×N tile grid; clahe only)
+
+# ===== Data augmentation =====
+augmentation:
+  strategy: "basic"                # options: basic | heavy | none
+  horizontal_flip: true            # options: true | false
+  rotation_range: 10               # options: 0 | 5 | 10 | 15
+  zoom_range: 0.1                  # options: 0.0 | 0.1 | 0.2
+  width_shift_range: 0.1           # options: 0.0 | 0.1 | 0.2
+  height_shift_range: 0.1          # options: 0.0 | 0.1 | 0.2
+
+# ===== Data decomposition (dimensionality reduction) =====
+# OFF by default: a CNN needs the raw 48×48 spatial layout PCA would destroy.
+# Turn on only for the linear/logistic baseline or as a teaching ablation (data.md §6).
+decomposition:
+  method: "pca"                    # options: pca
+  n_components: 0.95               # options: 0.95 | 0.99 | 50 | 100
+                                   #   float in (0,1) = keep that fraction of variance;
+                                   #   int = keep exactly that many components
+
+# ===== Train / validation / test split =====
+# Test is FIXED by the Usage column (PublicTest + PrivateTest = test_with_emotions.csv);
+# validation is carved stratified out of the Training rows. Split is seeded + fixed so
+# every ablation trains/evaluates on identical data (data.md §7 / CONTRIBUTING §8).
+split:
+  val_size: 0.2                    # options: 0.1 | 0.15 | 0.2  (fraction of Training used for validation)
+  stratify: true                   # options: true | false     (preserve per-class ratios in train/val)
+
+# ===== tf.data input pipeline =====
+pipeline:
+  shuffle_buffer: 1024             # options: 512 | 1024 | 4096  (train-only shuffle buffer)
+  cache: true                      # options: true | false      (cache slices in memory before shuffle)
+
+# ===== Model =====
+model:
+  architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16 | transfer_resnet50
+  optimizer: "adam"                # options: adam | sgd | rmsprop
+  learning_rate: 0.001             # options: 0.01 | 0.001 | 0.0001
+  batch_size: 64                   # options: 32 | 64 | 128
+  epochs: 100                      # options: any integer
+  dropout_rate: 0.5                # options: 0.3 | 0.4 | 0.5
+  num_conv_blocks: 3               # options: 2 | 3 | 4
+  filters_start: 32                # options: 32 | 64
+  kernel_size: 3                   # options: 3 | 5   (conv kernel; VGG uses 3x3)
+  convs_per_block: 2               # options: 1 | 2 | 3  (stacked convs before each pool)
+  loss: "categorical_crossentropy" # options: categorical_crossentropy | focal_loss
+  num_classes: 7                   # fixed: Happy/Sad/Angry/Surprise/Fear/Disgust/Neutral
+
+# ===== Transfer learning (optional) =====
+# Only consulted when model.architecture is transfer_vgg16 / transfer_resnet50. The
+# backbone (ImageNet-pretrained, include_top=False) is wrapped with input adaptation
+# (48x48 grayscale -> resize -> replicate to 3 channels -> backbone preprocess_input)
+# and a fresh classifier head. Expects preprocessing.normalization: rescale (inputs
+# in [0,1]); a different normalizer would defeat the backbone's preprocess_input.
+transfer:
+  weights: "imagenet"      # options: imagenet | none   (none = random init, e.g. offline tests)
+  trainable_layers: 0      # options: 0 | any int
+                           #   0 = feature extraction (freeze the whole backbone, train head only)
+                           #   N = fine-tune: unfreeze the top N backbone layers (use a LOW
+                           #       model.learning_rate, e.g. 0.0001; BatchNorm stays frozen)
+  input_size: 96           # options: 48 | 96 | 224     (backbone input side; bigger = slower)
+
+# ===== Callbacks =====
+callbacks:
+  monitor: "val_loss"             # options: val_loss | val_accuracy  (metric all callbacks watch)
+  early_stopping: true            # options: true | false  (false = ablate early stopping to SEE overfitting)
+  tensorboard: true               # options: true | false  (mandatory per subject; logs scalars + graph)
+  early_stopping_patience: 10      # options: 5 | 10 | 15
+  reduce_lr_patience: 5            # options: 3 | 5 | 7
+  reduce_lr_factor: 0.5            # options: 0.2 | 0.5
+  min_lr: 0.000001                 # options: any small float
+
+# ===== Hyperparameter tuning =====
+# The search SPACE lives here as arrays of candidates (Ablation §3): one array per
+# knob, the tuner samples one value per array per trial. A sampled value OVERRIDES
+# the matching model.* default. Search is scored on VALIDATION only, never test
+# (CONTRIBUTING §8) — the objective mirrors callbacks.monitor. Scaffolding: #43; run: #44.
+tuning:
+  strategy: "random"               # options: grid | random | bayesian | hyperband
+                                   #   grid     = every combination (exhaustive, expensive)
+                                   #   random   = max_trials random draws (best coverage/cost)
+                                   #   bayesian = model-guided search of promising regions
+                                   #   hyperband = successive halving (prunes weak trials early)
+  max_trials: 10                   # options: any integer  (grid/random/bayesian; hyperband ignores it)
+  tune_epochs: 15                  # options: any integer  (epochs PER trial while searching; the
+                                   #   final retrain uses model.epochs — keep this smaller to stay cheap)
+  executions_per_trial: 1          # options: 1 | 2 | 3    (avg N runs per trial to smooth init noise)
+  hyperband_max_epochs: 30         # options: any integer  (hyperband only: max epochs for a full config)
+  tuning_dir: "logs/tuning/"       # options: any path     (Keras-Tuner trial state / checkpoints)
+  project_name: "fer_tuning"       # options: any string   (sub-dir under tuning_dir per study)
+  # --- Search space: arrays of candidate values (mirror the model.* # options above). ---
+  search_space:
+    learning_rate: [0.01, 0.001, 0.0001]   # LR first — the highest-leverage knob
+    batch_size: [32, 64, 128]              # applied at fit time (consumed by #44's search)
+    dropout_rate: [0.3, 0.4, 0.5]
+    filters_start: [32, 64]
+    optimizer: ["adam", "sgd", "rmsprop"]
+
+# ===== Evaluation =====
+evaluation:
+  metrics:                         # options per item: accuracy | f1_macro | confusion_matrix | roc_auc
+    - "accuracy"
+    - "f1_macro"
+    - "confusion_matrix"
+  cross_validation: false          # options: true | false
+  cv_folds: 5                      # options: 3 | 5 | 10
+
+# ===== Model optimization (optional, post-training quantization) =====
+# Shrinks the trained model + speeds up inference for the real-time webcam loop, at
+# the cost of some accuracy. OFF by default; scripts/optimize.py emits a TFLite model
+# ONLY when enabled, and always measures the accuracy drop first (CONTRIBUTING §8 —
+# never ship a quantized model without the accuracy check). Toggle it like any stage.
+optimization:
+  enabled: false           # options: true | false  (true = also emit a quantized .tflite)
+  quantization: "float16"  # options: none | dynamic | float16 | int8
+                           #   none    = float32 TFLite (format only, no quantization)
+                           #   dynamic = dynamic-range int8 weights, float activations (~4x smaller)
+                           #   float16 = half-precision weights (~2x smaller, tiny accuracy loss)
+                           #   int8    = full int8, needs a representative dataset (~4x smaller, fastest)
+  representative_samples: 100  # options: any int   (int8 only: # calibration images from the train split)
+  max_accuracy_drop: 0.02      # options: any float (guardrail: warn if accuracy falls more than this)
+  # --- Weight pruning (#48): zero the smallest weights → a sparser model, then fine-tune
+  #     to recover. Independent of quantization above; the two pair well (prune → quantize).
+  pruning:
+    enabled: false           # options: true | false  (true = prune the model before export)
+    target_sparsity: 0.5     # options: 0.3 | 0.5 | 0.75  (fraction of weights zeroed)
+    fine_tune_epochs: 2      # options: any int   (epochs to recover accuracy after pruning)
+    frequency: 100           # options: any int   (re-apply the mask every N training steps)
+
+# ===== Face detection =====
+face_detector:
+  backend: "haar"                  # options: haar | dnn
+  haar_cascade: "haarcascade_frontalface_default.xml"
+  dnn_prototxt: "models/deploy.prototxt"
+  dnn_model: "models/res10_300x300_ssd_iter_140000.caffemodel"
+  scale_factor: 1.1                # options: 1.05 | 1.1 | 1.3
+  min_neighbors: 5                 # options: 3 | 5 | 7
+  min_size: [30, 30]               # options: [24,24] | [30,30] | [48,48]
+  confidence_threshold: 0.5        # options: 0.3 | 0.5 | 0.7  (dnn backend only)
+
+# ===== Video / live stream =====
+video:
+  source: 0                        # options: 0 (webcam) | "path/to/video.mp4"
+  frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
+  display_fps: true                # options: true | false
+  window_title: "Emotion Detector"
