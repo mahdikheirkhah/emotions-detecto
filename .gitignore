@@ -23,10 +23,10 @@ data/fer2013/*
 data/*
 
 # Machine Learning Models
-*.keras
-*.h5
-*.pkl
-*.model
+#*.keras
+#*.h5
+#*.pkl
+#*.model
 
 # TensorBoard / run logs
 logs/
