@@ -40,6 +40,10 @@ paths:
   arch_txt_path: "results/model/architecture.txt"
   learning_curves_path: "results/model/learning_curves.png"
   tensorboard_dir: "logs/tensorboard/"
+  # Transfer-learning artifacts (used only when model.architecture is a transfer_* option),
+  # kept separate so a transfer run never overwrites the from-scratch model above.
+  pretrained_model_save_path: "results/model/pre_trained_model.keras"
+  pretrained_arch_txt_path: "results/model/pre_trained_model_architecture.txt"
 
 # ===== Pipeline stage toggles (ablation switches) =====
 # Set a stage to false to measure what it contributes to accuracy.
@@ -120,7 +124,7 @@ pipeline:
 
 # ===== Model =====
 model:
-  architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16
+  architecture: "vgg_small"        # options: simple_cnn | vgg_small | resnet_mini | transfer_vgg16 | transfer_resnet50
   optimizer: "adam"                # options: adam | sgd | rmsprop
   learning_rate: 0.001             # options: 0.01 | 0.001 | 0.0001
   batch_size: 64                   # options: 32 | 64 | 128
@@ -132,6 +136,20 @@ model:
   convs_per_block: 2               # options: 1 | 2 | 3  (stacked convs before each pool)
   loss: "categorical_crossentropy" # options: categorical_crossentropy | focal_loss
   num_classes: 7                   # fixed: Happy/Sad/Angry/Surprise/Fear/Disgust/Neutral
+
+# ===== Transfer learning (optional) =====
+# Only consulted when model.architecture is transfer_vgg16 / transfer_resnet50. The
+# backbone (ImageNet-pretrained, include_top=False) is wrapped with input adaptation
+# (48x48 grayscale -> resize -> replicate to 3 channels -> backbone preprocess_input)
+# and a fresh classifier head. Expects preprocessing.normalization: rescale (inputs
+# in [0,1]); a different normalizer would defeat the backbone's preprocess_input.
+transfer:
+  weights: "imagenet"      # options: imagenet | none   (none = random init, e.g. offline tests)
+  trainable_layers: 0      # options: 0 | any int
+                           #   0 = feature extraction (freeze the whole backbone, train head only)
+                           #   N = fine-tune: unfreeze the top N backbone layers (use a LOW
+                           #       model.learning_rate, e.g. 0.0001; BatchNorm stays frozen)
+  input_size: 96           # options: 48 | 96 | 224     (backbone input side; bigger = slower)
 
 # ===== Callbacks =====
 callbacks:

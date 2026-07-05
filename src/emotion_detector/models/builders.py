@@ -7,6 +7,7 @@ so swapping architectures is a one-line config change. ``build`` returns a
 
 TensorFlow is imported lazily so importing this module is cheap.
 """
+
 from __future__ import annotations
 
 from typing import Any, Tuple
@@ -14,6 +15,7 @@ from typing import Any, Tuple
 from src.emotion_detector.models.base import BaseModelBuilder
 from src.emotion_detector.models.blocks import conv_block
 from src.emotion_detector.models.compile import compile_model
+from src.emotion_detector.models.transfer import TransferModelBuilder
 from src.emotion_detector.utils.dispatch import dispatch
 from src.emotion_detector.utils.logging import logger
 
@@ -116,7 +118,10 @@ def build_model(cfg: dict, summary: bool = True) -> Any:
     registry = {
         "simple_cnn": lambda: SimpleCnnBuilder(cfg),
         "vgg_small": lambda: VggSmallBuilder(cfg),
-        # resnet_mini / transfer_vgg16 land later — add options, never delete.
+        # Optional transfer-learning backbones (Issue #46) — same dispatch contract.
+        "transfer_vgg16": lambda: TransferModelBuilder(cfg, backbone="vgg16"),
+        "transfer_resnet50": lambda: TransferModelBuilder(cfg, backbone="resnet50"),
+        # resnet_mini lands later — add options, never delete.
     }
     builder = dispatch(m["architecture"], registry)
     model = builder.build(input_shape, num_classes)

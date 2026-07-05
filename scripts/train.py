@@ -10,6 +10,7 @@ config and re-run for a complete ablation experiment:
 
     python scripts/train.py
 """
+
 from __future__ import annotations
 
 import json
@@ -114,9 +115,22 @@ def run(cfg: dict) -> Any:
     return history
 
 
+def _artifact_paths(cfg: dict) -> tuple[str, str]:
+    """Return (model_save_path, arch_txt_path), routed for transfer architectures.
+
+    A ``transfer_*`` run writes to the separate ``pretrained_*`` paths so it never
+    overwrites the from-scratch ``final_emotion_model.keras`` (Issue #46).
+    """
+    paths = cfg["paths"]
+    if cfg["model"]["architecture"].startswith("transfer"):
+        return paths["pretrained_model_save_path"], paths["pretrained_arch_txt_path"]
+    return paths["model_save_path"], paths["arch_txt_path"]
+
+
 def _write_summary(model: Any, cfg: dict) -> None:
-    """Write model.summary() to the architecture txt path."""
-    path = Path(cfg["paths"]["arch_txt_path"])
+    """Write model.summary() to the architecture txt path (transfer-aware)."""
+    _, arch_txt_path = _artifact_paths(cfg)
+    path = Path(arch_txt_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     model.summary(print_fn=lines.append)
@@ -126,7 +140,8 @@ def _write_summary(model: Any, cfg: dict) -> None:
 
 def _save_outputs(model: Any, history: Any, cfg: dict) -> None:
     """Save the final model and the history dict as JSON."""
-    model_path = Path(cfg["paths"]["model_save_path"])
+    model_save_path, _ = _artifact_paths(cfg)
+    model_path = Path(model_save_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)
     model.save(model_path)  # early stopping already restored the best weights
 
