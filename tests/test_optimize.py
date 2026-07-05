@@ -15,8 +15,12 @@ pytest.importorskip("tensorflow")
 from src.emotion_detector.models.optimize import (
     TFLitePredictor,
     optimize_model,
+    polynomial_decay_sparsity,
+    prune,
+    prune_and_report,
     quantize,
     save_tflite,
+    sparsity,
 )
 
 
@@ -117,3 +121,82 @@ def test_save_tflite_writes_file(tmp_path) -> None:
     path = tmp_path / "m.tflite"
     save_tflite(tflite, str(path))
     assert path.exists() and path.stat().st_size == len(tflite)
+
+
+# ---------------------------------------------------------------------------
+# weight pruning (#48)
+# ---------------------------------------------------------------------------
+
+
+def _prune_cfg(target=0.5, epochs=1) -> dict:
+    return {
+        "optimization": {
+            "max_accuracy_drop": 0.5,
+            "pruning": {
+                "target_sparsity": target,
+                "fine_tune_epochs": epochs,
+                "frequency": 5,
+            },
+        },
+        "model": {"num_classes": 7, "batch_size": 16},
+    }
+
+
+def test_polynomial_decay_ramps_initial_to_final() -> None:
+    assert polynomial_decay_sparsity(0, 100, 0.0, 0.6) == 0.0  # starts at initial
+    assert polynomial_decay_sparsity(100, 100, 0.0, 0.6) == pytest.approx(
+        0.6
+    )  # ends final
+    mid = polynomial_decay_sparsity(50, 100, 0.0, 0.6)
+    assert 0.0 < mid < 0.6  # monotonic in between
+
+
+def test_one_shot_prune_reaches_target_sparsity() -> None:
+    model = _model()
+    prune(model, _prune_cfg(target=0.5))  # no fine-tune data → one-shot
+    assert sparsity(model) == pytest.approx(0.5, abs=0.02)
+
+
+def test_pruned_model_still_predicts_valid_class() -> None:
+    X, _ = _data()
+    model = _model()
+    prune(model, _prune_cfg(target=0.6))
+    cls = np.argmax(model.predict(X[:5], verbose=0), axis=1)
+    assert cls.shape == (5,)
+    assert cls.min() >= 0 and cls.max() < 7
+
+
+def test_prune_with_fine_tune_recovers_and_stays_sparse() -> None:
+    from tensorflow import keras
+
+    X, y = _data(32)
+    y_oh = keras.utils.to_categorical(y, 7)
+    model = _model()
+    prune(model, _prune_cfg(target=0.6, epochs=1), X, y_oh)  # prune → fine-tune
+    assert sparsity(model) == pytest.approx(
+        0.6, abs=0.02
+    )  # still sparse after training
+
+
+def test_invalid_target_sparsity_fails_loud() -> None:
+    with pytest.raises(ValueError):
+        prune(_model(), _prune_cfg(target=1.5))
+
+
+def test_prune_and_report_has_sparsity_and_accuracy_deltas() -> None:
+    X, y = _data(24)
+    report = prune_and_report(_model(), _prune_cfg(target=0.5), X, y)
+    for key in (
+        "target_sparsity",
+        "achieved_sparsity",
+        "dense_gzip_bytes",
+        "pruned_gzip_bytes",
+        "gzip_reduction",
+        "dense_accuracy",
+        "pruned_accuracy",
+        "accuracy_drop",
+        "passed",
+    ):
+        assert key in report
+    assert report["achieved_sparsity"] == pytest.approx(0.5, abs=0.02)
+    assert isinstance(report["passed"], bool)
