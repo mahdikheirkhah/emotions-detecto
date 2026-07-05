@@ -128,6 +128,8 @@ model:
   dropout_rate: 0.5                # options: 0.3 | 0.4 | 0.5
   num_conv_blocks: 3               # options: 2 | 3 | 4
   filters_start: 32                # options: 32 | 64
+  kernel_size: 3                   # options: 3 | 5   (conv kernel; VGG uses 3x3)
+  convs_per_block: 2               # options: 1 | 2 | 3  (stacked convs before each pool)
   loss: "categorical_crossentropy" # options: categorical_crossentropy | focal_loss
   num_classes: 7                   # fixed: Happy/Sad/Angry/Surprise/Fear/Disgust/Neutral
 
