@@ -26,6 +26,10 @@ data/*
 #*.keras
 #*.h5
 #*.pkl
+
+# Pretrained face-detector weights — a downloaded dependency, not a deliverable:
+# fetch with `python scripts/download_face_model.py` (see #50). The prototxt IS committed.
+models/*.caffemodel
 #*.model
 
 # TensorBoard / run logs
