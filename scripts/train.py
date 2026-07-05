@@ -57,12 +57,67 @@ def _load_all_rows(cfg: dict):
     )
 
 
+def _search_callbacks(cfg: dict) -> list:
+    """EarlyStopping-only callbacks for the search (prune weak trials early).
+
+    Not the full training bundle: Keras Tuner owns per-trial checkpointing/logging,
+    so ModelCheckpoint/TensorBoard here would fight it across trials.
+    """
+    from tensorflow import keras
+
+    cb = cfg["callbacks"]
+    if not cb.get("early_stopping", True):
+        return []
+    return [
+        keras.callbacks.EarlyStopping(
+            monitor=cb["monitor"],
+            patience=cb.get("early_stopping_patience", 10),
+            restore_best_weights=True,
+        )
+    ]
+
+
+def _run_tuning(cfg: dict, train_ds: Any, val_ds: Any, class_weight: Any) -> dict:
+    """Search the #43 space on the given datasets and return a config with the winner.
+
+    Selects by VALIDATION score (never test), applies the winning hyperparameters to a
+    copy of ``cfg`` (in-memory — this does NOT rewrite config.yaml; run scripts/tune.py
+    to persist), and logs + saves the trials table. Returns the tuned config.
+    """
+    from src.emotion_detector.models.tuning import (
+        apply_hyperparameters,
+        best_hyperparameters,
+        make_tuner,
+        results_table,
+        save_results_table,
+    )
+
+    logger.info("stages.tuning ON — searching hyperparameters before the final train…")
+    tuner = make_tuner(cfg)
+    tuner.search(
+        train_ds,
+        validation_data=val_ds,
+        epochs=cfg["tuning"]["tune_epochs"],
+        callbacks=_search_callbacks(cfg),
+        class_weight=class_weight,
+        verbose=2,
+    )
+    try:
+        save_results_table(results_table(tuner), cfg)
+    except Exception as exc:  # persistence is best-effort; never block training
+        logger.warning(f"Could not save tuning results table: {exc}")
+
+    best = best_hyperparameters(tuner)
+    logger.info(f"Tuning done — best hyperparameters (by validation): {best}")
+    return apply_hyperparameters(cfg, best)
+
+
 def run(cfg: dict) -> Any:
     """Execute one training run from a loaded config dict.
 
     Returns the Keras ``History`` object. Every stage self-gates on its toggle
-    (cleaning, preprocessing, augmentation, …), so this conductor just calls them
-    in order.
+    (cleaning, preprocessing, augmentation, tuning, …), so this conductor just calls
+    them in order.
     """
     set_global_seed(cfg["global"]["seed"])
     logger.info("=== Training run start ===")
@@ -89,6 +144,14 @@ def run(cfg: dict) -> Any:
     # 4. tf.data pipelines (shuffle + augment on train only).
     train_ds = make_dataset(X_train, y_train, cfg, training=True)
     val_ds = make_dataset(X_val, y_val, cfg, training=False)
+
+    # 4b. Optional hyperparameter search (stages.tuning) — pick the best config on
+    # VALIDATION first, then train the final model with it. Rebuild the datasets so a
+    # tuned batch_size takes effect. Off by default → normal runs are unchanged.
+    if is_stage_on(cfg, "tuning"):
+        cfg = _run_tuning(cfg, train_ds, val_ds, class_weight)
+        train_ds = make_dataset(X_train, y_train, cfg, training=True)
+        val_ds = make_dataset(X_val, y_val, cfg, training=False)
 
     # 5. Build + compile the model; assemble callbacks.
     model = build_model(cfg)

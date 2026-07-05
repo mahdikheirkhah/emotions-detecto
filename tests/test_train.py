@@ -4,6 +4,7 @@ Mocks the dataset fetcher (no real FER-2013 needed) and runs one epoch end-to-en
 asserting the orchestration wires together and persists its outputs. Skipped where
 TensorFlow is unavailable.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -48,6 +49,7 @@ def _cfg(tmp_path: Path, **stage_over) -> dict:
         "preprocessing": True,
         "augmentation": True,
         "decomposition": False,
+        "tuning": False,
     }
     stages.update(stage_over)
     return {
@@ -122,6 +124,7 @@ def _run(tmp_path, monkeypatch, **stage_over):
 # end-to-end orchestration
 # ---------------------------------------------------------------------------
 
+
 def test_run_trains_and_returns_history(tmp_path, monkeypatch) -> None:
     _, history = _run(tmp_path, monkeypatch)
     assert "loss" in history.history
@@ -154,3 +157,68 @@ def test_run_stage_off_still_trains(tmp_path, monkeypatch) -> None:
         tmp_path, monkeypatch, cleaning=False, preprocessing=False, augmentation=False
     )
     assert "val_loss" in history.history
+
+
+# ---------------------------------------------------------------------------
+# stages.tuning wiring (search runs BEFORE the final train)
+# ---------------------------------------------------------------------------
+
+
+class _FakeTuner:
+    """Stands in for a keras_tuner tuner — search is a no-op."""
+
+    def search(self, *args, **kwargs) -> None:
+        pass
+
+
+def test_run_tuning_applies_best_hyperparameters(tmp_path, monkeypatch) -> None:
+    # _run_tuning must splice the winning values into the config it returns.
+    train = _load_train_module()
+    import src.emotion_detector.models.tuning as tmod
+
+    monkeypatch.setattr(tmod, "make_tuner", lambda cfg: _FakeTuner())
+    monkeypatch.setattr(
+        tmod,
+        "best_hyperparameters",
+        lambda tuner: {"learning_rate": 0.01, "optimizer": "sgd"},
+    )
+    monkeypatch.setattr(tmod, "results_table", lambda tuner: None)
+    monkeypatch.setattr(tmod, "save_results_table", lambda df, cfg: {})
+
+    cfg = _cfg(tmp_path)
+    cfg["tuning"] = {"tune_epochs": 1}
+    tuned = train._run_tuning(cfg, None, None, None)
+
+    assert tuned["model"]["learning_rate"] == 0.01
+    assert tuned["model"]["optimizer"] == "sgd"
+    assert cfg["model"]["learning_rate"] == 0.001  # original untouched (deep copy)
+
+
+def test_tuning_stage_on_invokes_search_then_trains(tmp_path, monkeypatch) -> None:
+    # stages.tuning: true must call _run_tuning, then still train end-to-end.
+    train = _load_train_module()
+    monkeypatch.setattr(train, "Fer2013Fetcher", _FakeFetcher)
+
+    called = {}
+
+    def _spy(cfg, train_ds, val_ds, class_weight):
+        called["ran"] = True
+        return cfg  # unchanged → normal training proceeds
+
+    monkeypatch.setattr(train, "_run_tuning", _spy)
+
+    history = train.run(_cfg(tmp_path, tuning=True))
+    assert called.get("ran") is True
+    assert "val_loss" in history.history
+
+
+def test_tuning_stage_off_skips_search(tmp_path, monkeypatch) -> None:
+    # default (tuning off) must NOT call _run_tuning.
+    train = _load_train_module()
+    monkeypatch.setattr(train, "Fer2013Fetcher", _FakeFetcher)
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("_run_tuning should not run when stages.tuning is false")
+
+    monkeypatch.setattr(train, "_run_tuning", _boom)
+    train.run(_cfg(tmp_path))  # tuning defaults to False → no exception
