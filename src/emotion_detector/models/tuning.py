@@ -23,7 +23,8 @@ logic stays testable with a plain fake ``hp``.
 from __future__ import annotations
 
 import copy
-from typing import Any, Callable, Dict
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
 from src.emotion_detector.utils.dispatch import dispatch
 from src.emotion_detector.utils.logging import logger
@@ -176,3 +177,66 @@ def search_space_size(cfg: dict) -> int:
     for candidates in cfg["tuning"]["search_space"].values():
         combos *= len(candidates)
     return combos
+
+
+# ---------------------------------------------------------------------------
+# #44 — reading the trials table + selecting the winner (run in scripts/tune.py)
+# ---------------------------------------------------------------------------
+
+
+def results_table(tuner: Any) -> Any:
+    """Build a sorted trials table (best first) as a ``pandas.DataFrame``.
+
+    One row per completed trial: ``rank``, ``trial_id``, the objective ``score``,
+    and every searched hyperparameter — so you can *read* the table and spot which
+    knob actually moved the metric. Ranking follows the tuner's oracle, which orders
+    by the validation objective (never test), so the top row is the winner.
+
+    Args:
+        tuner: A searched ``keras_tuner`` tuner (its ``oracle`` holds the trials).
+
+    Returns:
+        ``pandas.DataFrame`` ordered best → worst.
+    """
+    import pandas as pd
+
+    n_trials = len(tuner.oracle.trials)
+    best_first = tuner.oracle.get_best_trials(num_trials=n_trials)
+    rows: List[Dict[str, Any]] = []
+    for rank, trial in enumerate(best_first, 1):
+        row: Dict[str, Any] = {
+            "rank": rank,
+            "trial_id": trial.trial_id,
+            "score": trial.score,
+        }
+        row.update(trial.hyperparameters.values)  # one column per searched knob
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def best_hyperparameters(tuner: Any) -> Dict[str, Any]:
+    """Return the winning hyperparameter values (highest validation score).
+
+    Selection is by **validation** performance only — the test set is confirmed
+    exactly once afterwards, never used to choose (CONTRIBUTING §8).
+    """
+    best = tuner.get_best_hyperparameters(num_trials=1)[0]
+    return dict(best.values)
+
+
+def save_results_table(df: Any, cfg: dict) -> Dict[str, str]:
+    """Persist the trials table under ``results/tuning/`` as CSV **and** JSON.
+
+    Both formats: CSV for eyeballing/spreadsheets, JSON for programmatic reload.
+
+    Returns:
+        ``{"csv": ..., "json": ...}`` — the written paths.
+    """
+    out_dir = Path(cfg["paths"]["results_dir"]) / "tuning"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = out_dir / "tuning_results.csv"
+    json_path = out_dir / "tuning_results.json"
+    df.to_csv(csv_path, index=False)
+    df.to_json(json_path, orient="records", indent=2)
+    logger.info(f"Saved tuning results → {csv_path} and {json_path}")
+    return {"csv": str(csv_path), "json": str(json_path)}

@@ -155,6 +155,8 @@ tuning:
                                    #   bayesian = model-guided search of promising regions
                                    #   hyperband = successive halving (prunes weak trials early)
   max_trials: 10                   # options: any integer  (grid/random/bayesian; hyperband ignores it)
+  tune_epochs: 15                  # options: any integer  (epochs PER trial while searching; the
+                                   #   final retrain uses model.epochs — keep this smaller to stay cheap)
   executions_per_trial: 1          # options: 1 | 2 | 3    (avg N runs per trial to smooth init noise)
   hyperband_max_epochs: 30         # options: any integer  (hyperband only: max epochs for a full config)
   tuning_dir: "logs/tuning/"       # options: any path     (Keras-Tuner trial state / checkpoints)
