@@ -45,6 +45,7 @@ paths:
   pretrained_model_save_path: "results/model/pre_trained_model.keras"
   pretrained_arch_txt_path: "results/model/pre_trained_model_architecture.txt"
   tflite_model_save_path: "results/model/final_emotion_model.tflite"  # quantized artifact (#47)
+  pruned_model_save_path: "results/model/pruned_emotion_model.keras"  # sparse artifact (#48)
 
 # ===== Pipeline stage toggles (ablation switches) =====
 # Set a stage to false to measure what it contributes to accuracy.
@@ -211,6 +212,13 @@ optimization:
                            #   int8    = full int8, needs a representative dataset (~4x smaller, fastest)
   representative_samples: 100  # options: any int   (int8 only: # calibration images from the train split)
   max_accuracy_drop: 0.02      # options: any float (guardrail: warn if accuracy falls more than this)
+  # --- Weight pruning (#48): zero the smallest weights → a sparser model, then fine-tune
+  #     to recover. Independent of quantization above; the two pair well (prune → quantize).
+  pruning:
+    enabled: false           # options: true | false  (true = prune the model before export)
+    target_sparsity: 0.5     # options: 0.3 | 0.5 | 0.75  (fraction of weights zeroed)
+    fine_tune_epochs: 2      # options: any int   (epochs to recover accuracy after pruning)
+    frequency: 100           # options: any int   (re-apply the mask every N training steps)
 
 # ===== Face detection =====
 face_detector:
