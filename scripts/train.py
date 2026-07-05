@@ -229,4 +229,6 @@ def main(config_path: str = "config.yaml") -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Optional config path arg, e.g. `python scripts/train.py config_transfer.yaml`
+    # to train the transfer model without touching the default config.yaml.
+    main(sys.argv[1] if len(sys.argv) > 1 else "config.yaml")
