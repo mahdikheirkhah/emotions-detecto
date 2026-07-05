@@ -144,11 +144,28 @@ callbacks:
   min_lr: 0.000001                 # options: any small float
 
 # ===== Hyperparameter tuning =====
+# The search SPACE lives here as arrays of candidates (Ablation §3): one array per
+# knob, the tuner samples one value per array per trial. A sampled value OVERRIDES
+# the matching model.* default. Search is scored on VALIDATION only, never test
+# (CONTRIBUTING §8) — the objective mirrors callbacks.monitor. Scaffolding: #43; run: #44.
 tuning:
-  strategy: "random"               # options: random | bayesian | hyperband
-  max_trials: 10                   # options: any integer
-  executions_per_trial: 1          # options: 1 | 2 | 3
-  tuning_dir: "logs/tuning/"
+  strategy: "random"               # options: grid | random | bayesian | hyperband
+                                   #   grid     = every combination (exhaustive, expensive)
+                                   #   random   = max_trials random draws (best coverage/cost)
+                                   #   bayesian = model-guided search of promising regions
+                                   #   hyperband = successive halving (prunes weak trials early)
+  max_trials: 10                   # options: any integer  (grid/random/bayesian; hyperband ignores it)
+  executions_per_trial: 1          # options: 1 | 2 | 3    (avg N runs per trial to smooth init noise)
+  hyperband_max_epochs: 30         # options: any integer  (hyperband only: max epochs for a full config)
+  tuning_dir: "logs/tuning/"       # options: any path     (Keras-Tuner trial state / checkpoints)
+  project_name: "fer_tuning"       # options: any string   (sub-dir under tuning_dir per study)
+  # --- Search space: arrays of candidate values (mirror the model.* # options above). ---
+  search_space:
+    learning_rate: [0.01, 0.001, 0.0001]   # LR first — the highest-leverage knob
+    batch_size: [32, 64, 128]              # applied at fit time (consumed by #44's search)
+    dropout_rate: [0.3, 0.4, 0.5]
+    filters_start: [32, 64]
+    optimizer: ["adam", "sgd", "rmsprop"]
 
 # ===== Evaluation =====
 evaluation:
