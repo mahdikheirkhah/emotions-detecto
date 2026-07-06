@@ -1,83 +1,42 @@
-================================================================================
-PRE-TRAINED (TRANSFER-LEARNING) MODEL — ARCHITECTURE REFERENCE
-Issue #46 · optional path, does NOT replace the from-scratch CNN
-================================================================================
-
-NOTE: This is the design reference. When scripts/train.py runs with a transfer_*
-architecture it OVERWRITES this file with the real model.summary(). Until then, the
-layout below documents exactly what gets built.
-
---------------------------------------------------------------------------------
-1. WHY TRANSFER LEARNING
---------------------------------------------------------------------------------
-FER-2013 is small (~28.7k training images). A backbone pretrained on ImageNet
-(~1.2M photos) already encodes generic visual features — edges, textures, corners,
-simple parts — in its early conv layers. Those features transfer to faces, so we
-reuse them instead of learning everything from scratch, and train only a new head.
-
-Selected by a one-line config change (Ablation §3):
-    model.architecture: transfer_vgg16      # or transfer_resnet50
-
---------------------------------------------------------------------------------
-2. INPUT ADAPTATION  (48x48 grayscale  ->  backbone's expected input)
---------------------------------------------------------------------------------
-ImageNet backbones expect 3-channel images at >=32x32; FER-2013 is 48x48x1. The
-adaptation is baked INTO the model so it still accepts the pipeline's (48,48,1)
-tensors in [0,1] — no change to train.py / predict.py / the tf.data pipeline:
-
-    Input(48, 48, 1)                     # grayscale, values in [0,1]
-      -> Resizing(input_size, input_size)     # config transfer.input_size (e.g. 96)
-      -> Concatenate([x, x, x], axis=-1)      # replicate 1 channel -> 3 (RGB)
-      -> Rescaling(255.0)                     # [0,1] -> [0,255]
-      -> preprocess_input(...)                # backbone-specific mean/channel order
-    (requires preprocessing.normalization: rescale, so inputs really are in [0,1])
-
---------------------------------------------------------------------------------
-3. FULL MODEL
---------------------------------------------------------------------------------
-    Input(48,48,1)
-      -> [input adaptation, section 2]
-      -> Backbone(include_top=False, weights="imagenet")   # VGG16 or ResNet50
-      -> GlobalAveragePooling2D()                          # -> one vector per image
-      -> Dropout(model.dropout_rate)
-      -> Dense(7, softmax)                                 # the new task head
-
-Backbone options:
-  * VGG16     include_top=False  ~14.7M backbone params (all conv/pool; simple, stable)
-  * ResNet50  include_top=False  ~23.6M backbone params (residual; stronger, has BN)
-
---------------------------------------------------------------------------------
-4. FREEZE STRATEGY  (config transfer.trainable_layers)
---------------------------------------------------------------------------------
-FEATURE EXTRACTION  (trainable_layers: 0)  <- default, safest for a small dataset
-  * backbone.trainable = False
-  * only the Dense head trains  ->  exactly 2 trainable weight tensors (kernel+bias)
-  * fast, few parameters, low overfitting risk
-
-FINE-TUNING  (trainable_layers: N)
-  * unfreeze the top N backbone layers; keep the rest (and ALL BatchNorm) frozen
-  * use a LOW learning rate (e.g. model.learning_rate: 0.0001) so pretrained weights
-    adapt gently — a high LR would wreck the ImageNet features
-  * BatchNorm stays frozen: updating its running stats on small batches destabilizes
-    fine-tuning
-  Recommended workflow: feature-extract to convergence FIRST, then fine-tune top N.
-
---------------------------------------------------------------------------------
-5. COST / BENEFIT vs THE FROM-SCRATCH CNN
---------------------------------------------------------------------------------
-  + Reuses millions of images' worth of learned features; often trains faster to a
-    decent accuracy with less data.
-  - Domain mismatch: ImageNet is natural color photos, not 48x48 grayscale faces —
-    the transfer is imperfect.
-  - Size/compute overhead: 15-24M params vs ~1.5M for vgg_small; heavier to run live.
-  => Optional. Compare test accuracy against final_emotion_model.keras and keep
-     whichever wins; the from-scratch CNN remains the primary deliverable.
-
---------------------------------------------------------------------------------
-6. ARTIFACTS
---------------------------------------------------------------------------------
-  results/model/pre_trained_model.keras                 (paths.pretrained_model_save_path)
-  results/model/pre_trained_model_architecture.txt      (this file)
-Kept separate from the scratch model's final_emotion_model.keras so a transfer run
-never overwrites it.
-================================================================================
+Model: "transfer_vgg16"
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓
+┃ Layer (type)        ┃ Output Shape      ┃    Param # ┃ Connected to      ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩
+│ input_layer_2       │ (None, 48, 48, 1) │          0 │ -                 │
+│ (InputLayer)        │                   │            │                   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ resizing (Resizing) │ (None, 96, 96, 1) │          0 │ input_layer_2[0]… │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ concatenate         │ (None, 96, 96, 3) │          0 │ resizing[0][0],   │
+│ (Concatenate)       │                   │            │ resizing[0][0],   │
+│                     │                   │            │ resizing[0][0]    │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ rescaling           │ (None, 96, 96, 3) │          0 │ concatenate[0][0] │
+│ (Rescaling)         │                   │            │                   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ get_item (GetItem)  │ (None, 96, 96)    │          0 │ rescaling[0][0]   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ get_item_1          │ (None, 96, 96)    │          0 │ rescaling[0][0]   │
+│ (GetItem)           │                   │            │                   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ get_item_2          │ (None, 96, 96)    │          0 │ rescaling[0][0]   │
+│ (GetItem)           │                   │            │                   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ stack (Stack)       │ (None, 96, 96, 3) │          0 │ get_item[0][0],   │
+│                     │                   │            │ get_item_1[0][0], │
+│                     │                   │            │ get_item_2[0][0]  │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ add (Add)           │ (None, 96, 96, 3) │          0 │ stack[0][0]       │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ vgg16 (Functional)  │ (None, 3, 3, 512) │ 14,714,688 │ add[0][0]         │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ global_average_poo… │ (None, 512)       │          0 │ vgg16[0][0]       │
+│ (GlobalAveragePool… │                   │            │                   │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ dropout (Dropout)   │ (None, 512)       │          0 │ global_average_p… │
+├─────────────────────┼───────────────────┼────────────┼───────────────────┤
+│ dense (Dense)       │ (None, 7)         │      3,591 │ dropout[0][0]     │
+└─────────────────────┴───────────────────┴────────────┴───────────────────┘
+ Total params: 14,718,279 (56.15 MB)
+ Trainable params: 7,083,015 (27.02 MB)
+ Non-trainable params: 7,635,264 (29.13 MB)

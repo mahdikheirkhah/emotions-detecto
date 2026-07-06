@@ -2,7 +2,7 @@
   {
     "rank":1,
     "trial_id":"01",
-    "score":1.1437054873,
+    "score":1.2036725283,
     "learning_rate":0.001,
     "batch_size":64,
     "dropout_rate":0.3,
@@ -12,7 +12,7 @@
   {
     "rank":2,
     "trial_id":"00",
-    "score":1.209856391,
+    "score":1.2425515652,
     "learning_rate":0.001,
     "batch_size":32,
     "dropout_rate":0.4,
@@ -22,7 +22,7 @@
   {
     "rank":3,
     "trial_id":"03",
-    "score":1.2629977465,
+    "score":1.284591198,
     "learning_rate":0.01,
     "batch_size":64,
     "dropout_rate":0.3,
@@ -31,18 +31,8 @@
   },
   {
     "rank":4,
-    "trial_id":"09",
-    "score":1.2988225222,
-    "learning_rate":0.01,
-    "batch_size":64,
-    "dropout_rate":0.3,
-    "filters_start":32,
-    "optimizer":"adam"
-  },
-  {
-    "rank":5,
     "trial_id":"05",
-    "score":1.3427522182,
+    "score":1.2864382267,
     "learning_rate":0.01,
     "batch_size":128,
     "dropout_rate":0.5,
@@ -50,19 +40,19 @@
     "optimizer":"adam"
   },
   {
-    "rank":6,
-    "trial_id":"06",
-    "score":1.369625926,
+    "rank":5,
+    "trial_id":"09",
+    "score":1.3904383183,
     "learning_rate":0.01,
-    "batch_size":32,
-    "dropout_rate":0.5,
+    "batch_size":64,
+    "dropout_rate":0.3,
     "filters_start":32,
-    "optimizer":"sgd"
+    "optimizer":"adam"
   },
   {
-    "rank":7,
+    "rank":6,
     "trial_id":"04",
-    "score":1.4200848341,
+    "score":1.428514719,
     "learning_rate":0.0001,
     "batch_size":64,
     "dropout_rate":0.4,
@@ -70,9 +60,19 @@
     "optimizer":"adam"
   },
   {
+    "rank":7,
+    "trial_id":"06",
+    "score":1.4676795006,
+    "learning_rate":0.01,
+    "batch_size":32,
+    "dropout_rate":0.5,
+    "filters_start":32,
+    "optimizer":"sgd"
+  },
+  {
     "rank":8,
     "trial_id":"02",
-    "score":1.4512727261,
+    "score":1.4714708328,
     "learning_rate":0.0001,
     "batch_size":64,
     "dropout_rate":0.5,
@@ -82,7 +82,7 @@
   {
     "rank":9,
     "trial_id":"08",
-    "score":1.6333346367,
+    "score":1.5073812008,
     "learning_rate":0.01,
     "batch_size":64,
     "dropout_rate":0.5,
@@ -92,7 +92,7 @@
   {
     "rank":10,
     "trial_id":"07",
-    "score":1.7731963396,
+    "score":1.7625257969,
     "learning_rate":0.0001,
     "batch_size":128,
     "dropout_rate":0.3,

@@ -160,7 +160,7 @@ model:
 # in [0,1]); a different normalizer would defeat the backbone's preprocess_input.
 transfer:
   weights: "imagenet"      # options: imagenet | none   (none = random init, e.g. offline tests)
-  trainable_layers: 0      # options: 0 | any int
+  trainable_layers: 4     # options: 0 | any int
                            #   0 = feature extraction (freeze the whole backbone, train head only)
                            #   N = fine-tune: unfreeze the top N backbone layers (use a LOW
                            #       model.learning_rate, e.g. 0.0001; BatchNorm stays frozen)
