@@ -10,6 +10,7 @@ respects its stage toggle (#22).
 TensorFlow is imported lazily so ``to_tensors`` can be used without building a
 dataset.
 """
+
 from __future__ import annotations
 
 from typing import Any, Tuple
@@ -22,9 +23,7 @@ from src.emotion_detector.utils.logging import logger
 from src.emotion_detector.utils.stages import is_stage_on
 
 
-def to_tensors(
-    X: NDArray, y: NDArray, num_classes: int = 7
-) -> Tuple[NDArray, NDArray]:
+def to_tensors(X: NDArray, y: NDArray, num_classes: int = 7) -> Tuple[NDArray, NDArray]:
     """Reshape images to ``(N, H, W, 1)`` and one-hot encode labels to ``(N, C)``.
 
     Args:

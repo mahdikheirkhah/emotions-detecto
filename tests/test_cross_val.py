@@ -1,4 +1,5 @@
 """Unit tests for optional stratified k-fold cross-validation (skipped w/o TF)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -48,6 +49,7 @@ def _data(per_class=10):
 # toggle
 # ---------------------------------------------------------------------------
 
+
 def test_disabled_returns_empty() -> None:
     X, y = _data()
     assert cross_validate(_build_fn, X, y, _cfg(cross_validation=False)) == []
@@ -56,6 +58,7 @@ def test_disabled_returns_empty() -> None:
 # ---------------------------------------------------------------------------
 # k folds
 # ---------------------------------------------------------------------------
+
 
 def test_produces_k_result_entries() -> None:
     X, y = _data()

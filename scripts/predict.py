@@ -12,6 +12,7 @@ single, final, untouched measurement — no tuning against it.
 
 Run:  ``python ./scripts/predict.py``
 """
+
 from __future__ import annotations
 
 import sys

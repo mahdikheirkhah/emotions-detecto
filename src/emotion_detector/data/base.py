@@ -1,4 +1,5 @@
 """Abstract base classes for dataset fetching and image preprocessing."""
+
 from __future__ import annotations
 
 import abc
@@ -18,7 +19,9 @@ class BaseDatasetFetcher(abc.ABC):
     """
 
     @abc.abstractmethod
-    def fetch(self, data_dir: Path) -> Tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]:
+    def fetch(
+        self, data_dir: Path
+    ) -> Tuple[NDArray, NDArray, NDArray, NDArray, NDArray, NDArray]:
         """Download (if needed) and load the dataset.
 
         Args:

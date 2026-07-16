@@ -3,6 +3,7 @@
 TF-dependent tests are skipped automatically where TensorFlow is unavailable;
 the stage-off / zero-param / missing-key paths need no TF and always run.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -10,10 +11,10 @@ import pytest
 
 from src.emotion_detector.data.augmentation import IdentityAugmenter, build_augmenter
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(stage_on: bool = True, **overrides) -> dict:
     aug = {
@@ -39,6 +40,7 @@ def _batch(n: int = 8):
 # ---------------------------------------------------------------------------
 # no-TF paths (always run)
 # ---------------------------------------------------------------------------
+
 
 def test_stage_off_returns_identity() -> None:
     assert isinstance(build_augmenter(_cfg(stage_on=False)), IdentityAugmenter)
@@ -72,6 +74,7 @@ def test_missing_key_raises() -> None:
 # ---------------------------------------------------------------------------
 # TF-dependent paths
 # ---------------------------------------------------------------------------
+
 
 def test_augmented_batch_keeps_shape() -> None:
     pytest.importorskip("tensorflow")

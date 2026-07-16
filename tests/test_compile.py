@@ -1,4 +1,5 @@
 """Unit tests for config-driven compilation (skipped without TensorFlow)."""
+
 from __future__ import annotations
 
 import pytest
@@ -35,6 +36,7 @@ def _tiny_model():
 # build_optimizer
 # ---------------------------------------------------------------------------
 
+
 def test_adam_optimizer_type_and_lr() -> None:
     opt = build_optimizer(_cfg("adam", 0.001))
     assert isinstance(opt, keras.optimizers.Adam)
@@ -67,6 +69,7 @@ def test_unknown_optimizer_raises() -> None:
 # build_loss / build_metrics
 # ---------------------------------------------------------------------------
 
+
 def test_loss_categorical_crossentropy() -> None:
     assert build_loss(_cfg()) == "categorical_crossentropy"
 
@@ -83,6 +86,7 @@ def test_metrics_include_accuracy() -> None:
 # ---------------------------------------------------------------------------
 # compile_model
 # ---------------------------------------------------------------------------
+
 
 def test_compile_model_wires_optimizer_and_loss() -> None:
     model = compile_model(_tiny_model(), _cfg("adam", 0.005))

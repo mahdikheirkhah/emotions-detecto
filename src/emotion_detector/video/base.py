@@ -1,4 +1,5 @@
 """Abstract base class for face detection backends."""
+
 from __future__ import annotations
 
 import abc
@@ -6,7 +7,6 @@ from typing import List, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
-
 
 # A detected face is (x, y, w, h) in pixel coordinates.
 FaceRect = Tuple[int, int, int, int]

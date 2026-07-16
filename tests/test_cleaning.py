@@ -1,4 +1,5 @@
 """Unit tests for the config-driven cleaning strategies."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,10 +13,10 @@ from src.emotion_detector.data.cleaning import (
     clean_dataset,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(
     stage_on: bool = True,
@@ -53,6 +54,7 @@ def _data():
 # BaseCleaner is abstract
 # ---------------------------------------------------------------------------
 
+
 def test_base_cleaner_is_abstract() -> None:
     with pytest.raises(TypeError):
         BaseCleaner()  # type: ignore[abstract]
@@ -61,6 +63,7 @@ def test_base_cleaner_is_abstract() -> None:
 # ---------------------------------------------------------------------------
 # DuplicateRemover
 # ---------------------------------------------------------------------------
+
 
 def test_duplicate_remover_removes_exact_duplicate() -> None:
     images, labels = _data()
@@ -104,6 +107,7 @@ def test_duplicate_remover_empty_input() -> None:
 # ---------------------------------------------------------------------------
 # CorruptImageRemover
 # ---------------------------------------------------------------------------
+
 
 def test_corrupt_remover_drops_constant() -> None:
     images, labels = _data()
@@ -153,6 +157,7 @@ def test_corrupt_remover_is_idempotent() -> None:
 # build_cleaners dispatch
 # ---------------------------------------------------------------------------
 
+
 def test_build_cleaners_all_enabled() -> None:
     cleaners = build_cleaners(_cfg())
     assert len(cleaners) == 2
@@ -190,6 +195,7 @@ def test_build_cleaners_missing_key_raises() -> None:
 # ---------------------------------------------------------------------------
 # clean_dataset orchestrator
 # ---------------------------------------------------------------------------
+
 
 def test_clean_dataset_runs_all_cleaners() -> None:
     images, labels = _data()

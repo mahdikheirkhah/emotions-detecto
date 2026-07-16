@@ -1,4 +1,5 @@
 """Unit tests for setup_logging."""
+
 from __future__ import annotations
 
 from pathlib import Path

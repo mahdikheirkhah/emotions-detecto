@@ -1,4 +1,5 @@
 """Unit tests for the config-driven normalization strategies."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -11,10 +12,10 @@ from src.emotion_detector.data.preprocessing import (
     build_normalizer,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(strategy: str = "rescale", stage_on: bool = True) -> dict:
     return {
@@ -32,6 +33,7 @@ def _images(seed: int = 0, n: int = 20):
 # IdentityPreprocessor
 # ---------------------------------------------------------------------------
 
+
 def test_identity_returns_values_unchanged() -> None:
     X = _images()
     out = IdentityPreprocessor().fit(X).transform(X)
@@ -42,6 +44,7 @@ def test_identity_returns_values_unchanged() -> None:
 # ---------------------------------------------------------------------------
 # RescalePreprocessor
 # ---------------------------------------------------------------------------
+
 
 def test_rescale_maps_to_unit_range() -> None:
     X = _images()
@@ -67,6 +70,7 @@ def test_rescale_fit_is_noop_returns_self() -> None:
 # ---------------------------------------------------------------------------
 # StandardizePreprocessor
 # ---------------------------------------------------------------------------
+
 
 def test_standardize_zero_mean_unit_std_on_train() -> None:
     X = _images()
@@ -105,6 +109,7 @@ def test_standardize_fit_returns_self() -> None:
 # ---------------------------------------------------------------------------
 # build_normalizer dispatch
 # ---------------------------------------------------------------------------
+
 
 def test_build_normalizer_none() -> None:
     assert isinstance(build_normalizer(_cfg("none")), IdentityPreprocessor)

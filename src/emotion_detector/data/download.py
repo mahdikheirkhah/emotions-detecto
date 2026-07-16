@@ -1,4 +1,5 @@
 """FER-2013 dataset downloader and extractor."""
+
 from __future__ import annotations
 
 import urllib.error
@@ -83,7 +84,9 @@ class Fer2013Downloader(BaseDatasetFetcher):
                 "Check network access or download the zip manually and place it "
                 f"at {zip_path}."
             ) from exc
-        logger.info(f"Download complete: {zip_path} ({zip_path.stat().st_size / 1e6:.1f} MB)")
+        logger.info(
+            f"Download complete: {zip_path} ({zip_path.stat().st_size / 1e6:.1f} MB)"
+        )
         return zip_path
 
     def _extract(self, zip_path: Path, data_dir: Path) -> None:

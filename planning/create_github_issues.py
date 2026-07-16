@@ -18,6 +18,7 @@ Usage:
     export GITHUB_REPO=mahdikheirkhah/emotions-detecto
     python planning/create_github_issues.py [--dry-run]
 """
+
 from __future__ import annotations
 
 import json
@@ -53,7 +54,9 @@ def parse_front_matter(text: str) -> tuple[dict, str]:
     return meta, body.strip()
 
 
-def create_issue(repo: str, token: str, title: str, body: str, labels: list[str]) -> int:
+def create_issue(
+    repo: str, token: str, title: str, body: str, labels: list[str]
+) -> int:
     """POST a single issue to the GitHub API and return its number."""
     url = f"https://api.github.com/repos/{repo}/issues"
     payload = json.dumps({"title": title, "body": body, "labels": labels}).encode()
@@ -88,7 +91,9 @@ def main() -> None:
             number = create_issue(repo, token, title, body, labels)
             print(f"created #{number}: {title}")
         except urllib.error.HTTPError as exc:
-            print(f"FAILED {path.name}: {exc.code} {exc.read().decode()}", file=sys.stderr)
+            print(
+                f"FAILED {path.name}: {exc.code} {exc.read().decode()}", file=sys.stderr
+            )
 
 
 if __name__ == "__main__":

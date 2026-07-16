@@ -6,6 +6,7 @@ early-stopping epoch (the val-loss minimum that ``restore_best_weights`` keeps)
 marked. This plot is the audit evidence that training stopped **before**
 validation loss diverged (CONTRIBUTING §8).
 """
+
 from __future__ import annotations
 
 import json

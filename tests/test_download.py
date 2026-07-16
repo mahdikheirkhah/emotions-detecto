@@ -1,4 +1,5 @@
 """Unit tests for Fer2013Downloader — all heavy I/O is mocked."""
+
 from __future__ import annotations
 
 import urllib.error
@@ -25,6 +26,7 @@ def _cfg(expected: list | None = None) -> dict:
 # idempotency
 # ---------------------------------------------------------------------------
 
+
 def test_fetch_skips_download_when_files_exist(tmp_path: Path) -> None:
     cfg = _cfg()
     (tmp_path / "train.csv").write_text("emotion,pixels\n")
@@ -38,6 +40,7 @@ def test_fetch_skips_download_when_files_exist(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # download path
 # ---------------------------------------------------------------------------
+
 
 def test_fetch_calls_urlretrieve_when_files_missing(tmp_path: Path) -> None:
     cfg = _cfg()
@@ -58,7 +61,9 @@ def test_fetch_calls_urlretrieve_when_files_missing(tmp_path: Path) -> None:
 
 def test_fetch_raises_on_url_error(tmp_path: Path) -> None:
     cfg = _cfg()
-    with patch("urllib.request.urlretrieve", side_effect=urllib.error.URLError("timeout")):
+    with patch(
+        "urllib.request.urlretrieve", side_effect=urllib.error.URLError("timeout")
+    ):
         with pytest.raises(urllib.error.URLError, match="Failed to download"):
             Fer2013Downloader(cfg).fetch(tmp_path)
 
@@ -88,6 +93,7 @@ def test_fetch_raises_when_expected_files_missing_after_extract(tmp_path: Path) 
 # ---------------------------------------------------------------------------
 # zip already cached
 # ---------------------------------------------------------------------------
+
 
 def test_fetch_skips_urlretrieve_when_zip_already_cached(tmp_path: Path) -> None:
     cfg = _cfg()

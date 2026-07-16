@@ -11,6 +11,7 @@ distribution each step (see results/model/final_emotion_model_arch.txt §5).
 
 TensorFlow is imported lazily so importing this module is cheap.
 """
+
 from __future__ import annotations
 
 from typing import Any, Optional

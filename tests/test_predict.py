@@ -4,6 +4,7 @@ Mocks the fetcher and model (no real data / trained model). A "perfect" fake mod
 decodes a label encoded into each image, so the accuracy is deterministic and the
 required stdout line can be asserted exactly. Skipped without TensorFlow.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -84,6 +85,7 @@ def _cfg(tmp_path: Path) -> dict:
 # score_test_set
 # ---------------------------------------------------------------------------
 
+
 def test_score_test_set_perfect_accuracy(tmp_path, monkeypatch) -> None:
     predict = _load_predict()
     monkeypatch.setattr(predict, "Fer2013Fetcher", _LabelEncodingFetcher)
@@ -95,6 +97,7 @@ def test_score_test_set_perfect_accuracy(tmp_path, monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # main() — the exact stdout contract
 # ---------------------------------------------------------------------------
+
 
 def test_main_prints_exact_format(tmp_path, monkeypatch, capsys) -> None:
     predict = _load_predict()

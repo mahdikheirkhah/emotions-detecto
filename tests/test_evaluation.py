@@ -1,4 +1,5 @@
 """Unit tests for the evaluation module (sklearn/matplotlib only — no TensorFlow)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,6 +42,7 @@ def _cfg(tmp_path: Path, metrics=None, num_classes=7) -> dict:
 # accuracy (hand-computed)
 # ---------------------------------------------------------------------------
 
+
 def test_accuracy_perfect(tmp_path: Path) -> None:
     y_true = np.array([0, 1, 2, 3])
     model = _FakeModel(_onehot([0, 1, 2, 3]))
@@ -59,6 +61,7 @@ def test_accuracy_four_of_five(tmp_path: Path) -> None:
 # macro-F1 (cross-checked against sklearn)
 # ---------------------------------------------------------------------------
 
+
 def test_f1_macro_matches_sklearn(tmp_path: Path) -> None:
     y_true = np.array([0, 0, 1, 1, 2])
     y_pred = [0, 1, 1, 1, 2]
@@ -73,6 +76,7 @@ def test_f1_macro_matches_sklearn(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # confusion matrix (hand-built) & report
 # ---------------------------------------------------------------------------
+
 
 def test_confusion_matrix_values(tmp_path: Path) -> None:
     y_true = np.array([0, 0, 1])
@@ -96,17 +100,24 @@ def test_classification_report_has_emotion_names(tmp_path: Path) -> None:
 # label formats, metric selection, plotting
 # ---------------------------------------------------------------------------
 
+
 def test_accepts_one_hot_labels(tmp_path: Path) -> None:
     preds = _onehot([0, 1, 2])
-    res = evaluate(_FakeModel(preds), np.zeros((3, 1)), preds.copy(), _cfg(tmp_path),
-                   plot=False)
+    res = evaluate(
+        _FakeModel(preds), np.zeros((3, 1)), preds.copy(), _cfg(tmp_path), plot=False
+    )
     assert res["accuracy"] == 1.0  # one-hot y_test argmax-decoded correctly
 
 
 def test_only_requested_metrics_computed(tmp_path: Path) -> None:
     model = _FakeModel(_onehot([0, 1]))
-    res = evaluate(model, np.zeros((2, 1)), np.array([0, 1]),
-                   _cfg(tmp_path, metrics=["accuracy"]), plot=False)
+    res = evaluate(
+        model,
+        np.zeros((2, 1)),
+        np.array([0, 1]),
+        _cfg(tmp_path, metrics=["accuracy"]),
+        plot=False,
+    )
     assert "accuracy" in res
     assert "f1_macro" not in res
     assert "confusion_matrix" not in res
@@ -120,6 +131,7 @@ def test_confusion_matrix_png_saved(tmp_path: Path) -> None:
 
 def test_plot_false_skips_png(tmp_path: Path) -> None:
     model = _FakeModel(_onehot([0, 1, 2]))
-    res = evaluate(model, np.zeros((3, 1)), np.array([0, 1, 2]), _cfg(tmp_path),
-                   plot=False)
+    res = evaluate(
+        model, np.zeros((3, 1)), np.array([0, 1, 2]), _cfg(tmp_path), plot=False
+    )
     assert "confusion_matrix_path" not in res

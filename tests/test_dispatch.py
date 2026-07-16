@@ -1,4 +1,5 @@
 """Unit tests for dispatch, is_stage_on, and set_global_seed."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,16 +7,18 @@ import pytest
 from src.emotion_detector.utils.dispatch import dispatch
 from src.emotion_detector.utils.stages import is_stage_on
 
-
 # ---------------------------------------------------------------------------
 # dispatch()
 # ---------------------------------------------------------------------------
 
+
 class _FakeA:
     pass
 
+
 class _FakeB:
     pass
+
 
 REGISTRY: dict = {"option_a": _FakeA, "option_b": _FakeB}
 
@@ -48,6 +51,7 @@ def test_dispatch_empty_registry_raises() -> None:
 # ---------------------------------------------------------------------------
 # is_stage_on()
 # ---------------------------------------------------------------------------
+
 
 def _cfg(stage_value: bool) -> dict:
     return {"stages": {"cleaning": stage_value, "augmentation": True}}

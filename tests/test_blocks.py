@@ -1,4 +1,5 @@
 """Unit tests for the reusable conv-block builder (skipped without TensorFlow)."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,6 +20,7 @@ def _model(input_shape=(48, 48, 1), **kwargs):
 # ---------------------------------------------------------------------------
 # shape behavior
 # ---------------------------------------------------------------------------
+
 
 def test_block_halves_spatial_dims() -> None:
     m = _model(filters=32)
@@ -46,6 +48,7 @@ def test_odd_input_uses_floor_division() -> None:
 # ---------------------------------------------------------------------------
 # parameterization
 # ---------------------------------------------------------------------------
+
 
 def test_n_convs_controls_conv_count() -> None:
     for n in (1, 2, 3):
@@ -89,6 +92,7 @@ def test_block_has_batchnorm_before_relu() -> None:
 # ---------------------------------------------------------------------------
 # validation
 # ---------------------------------------------------------------------------
+
 
 def test_invalid_filters_raises() -> None:
     with pytest.raises(ValueError, match="filters must be"):
