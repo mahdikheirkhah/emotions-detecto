@@ -58,3 +58,6 @@ build/
 #graphify
 graphify-out/
 .agents/
+
+# Adversarial bonus artifacts (#57/#58) — generated from the model on the VM, not committed
+results/adversarial/source_*

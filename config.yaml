@@ -265,3 +265,16 @@ video:
 dashboard:
   history_length: 100      # options: 50 | 100 | 300  (recent detections kept for the timeline)
   refresh_rate: 5          # options: 1 | 5 | 10       (target UI frame updates per second)
+
+# ===== Adversarial attack (bonus — #57 setup / #58 FGSM attack) =====
+# "Hack the CNN": #57 picks a source image the model is very sure is `target_class`; #58
+# perturbs it by `epsilon * sign(gradient)` to flip the prediction. Seeded + reproducible;
+# every knob here (Ablation §3). See src/emotion_detector/adversarial.py for the FGSM note.
+adversarial:
+  target_class: "Happy"              # options: any FER emotion (the class the source must read)
+  source_confidence_threshold: 0.9   # options: 0.8 | 0.9 | 0.95  (min model confidence to pick a source)
+  epsilon: 0.01                      # options: 0.005 | 0.01 | 0.03  (#58 FGSM per-pixel step, [0,1] inputs)
+  scan_split: "test"                 # options: test | train  (which split to search for a source image)
+  source_image_path: "results/adversarial/source_image.png"
+  source_array_path: "results/adversarial/source_array.npy"
+  source_probs_path: "results/adversarial/source_probabilities.json"
