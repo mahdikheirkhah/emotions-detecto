@@ -22,9 +22,8 @@ from sklearn.metrics import (
     f1_score,
 )
 
+from src.emotion_detector.models.labels import FER_EMOTIONS  # single source of truth
 from src.emotion_detector.utils.logging import logger
-
-FER_EMOTIONS = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
 
 
 def _to_indices(y: NDArray) -> NDArray:
