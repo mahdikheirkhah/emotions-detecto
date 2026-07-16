@@ -237,6 +237,8 @@ face_detector:
 # ===== Video / live stream =====
 video:
   source: 0                        # options: 0 (webcam) | "path/to/video.mp4"
+  fallback_path: "data/sample_video.mp4"  # recorded video used when `source` won't open
+                                   #   (headless/no-camera). "" disables the fallback (fail loud).
   frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
   display_fps: true                # options: true | false
   window_title: "Emotion Detector"
