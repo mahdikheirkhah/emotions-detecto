@@ -1,4 +1,5 @@
 """Stage-toggle helper for the Ablation-Driven Architecture."""
+
 from __future__ import annotations
 
 from loguru import logger
@@ -23,7 +24,9 @@ def is_stage_on(cfg: dict, stage: str) -> bool:
     try:
         value = cfg["stages"][stage]
     except KeyError:
-        raise KeyError(f"Unknown stage '{stage}'. Check the 'stages:' section in config.yaml.")
+        raise KeyError(
+            f"Unknown stage '{stage}'. Check the 'stages:' section in config.yaml."
+        )
 
     if not value:
         logger.info(f"Stage OFF: {stage} — passing data through unchanged.")

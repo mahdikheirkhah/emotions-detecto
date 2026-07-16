@@ -1,4 +1,5 @@
 """Unit tests for the config-driven class-imbalance strategies."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -13,10 +14,10 @@ from src.emotion_detector.data.imbalance import (
     resolve_imbalance,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(strategy: str = "class_weight", handle: bool = True, seed: int = 42) -> dict:
     return {
@@ -44,6 +45,7 @@ def _counts(y):
 # base is abstract
 # ---------------------------------------------------------------------------
 
+
 def test_base_imbalance_strategy_is_abstract() -> None:
     with pytest.raises(TypeError):
         BaseImbalanceStrategy()  # type: ignore[abstract]
@@ -52,6 +54,7 @@ def test_base_imbalance_strategy_is_abstract() -> None:
 # ---------------------------------------------------------------------------
 # NoResample
 # ---------------------------------------------------------------------------
+
 
 def test_no_resample_returns_data_unchanged() -> None:
     X, y = _imbalanced()
@@ -64,6 +67,7 @@ def test_no_resample_returns_data_unchanged() -> None:
 # ---------------------------------------------------------------------------
 # ClassWeightStrategy
 # ---------------------------------------------------------------------------
+
 
 def test_class_weight_leaves_data_unchanged() -> None:
     X, y = _imbalanced()
@@ -87,6 +91,7 @@ def test_class_weight_inverse_frequency() -> None:
 # ---------------------------------------------------------------------------
 # Oversampler
 # ---------------------------------------------------------------------------
+
 
 def test_oversample_balances_to_majority() -> None:
     X, y = _imbalanced()  # majority count = 6
@@ -116,6 +121,7 @@ def test_oversample_is_seeded_reproducible() -> None:
 # Undersampler
 # ---------------------------------------------------------------------------
 
+
 def test_undersample_balances_to_minority() -> None:
     X, y = _imbalanced()  # minority count = 1
     X_out, y_out, cw = Undersampler(seed=0).apply(X, y)
@@ -136,6 +142,7 @@ def test_undersample_no_replacement() -> None:
 # ---------------------------------------------------------------------------
 # resolve_imbalance dispatch
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_class_weight() -> None:
     X, y = _imbalanced()

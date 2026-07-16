@@ -21,6 +21,7 @@ All thresholds/patience come from ``config.yaml``. Early stopping can be **ablat
 (``callbacks.early_stopping: false``) to *see* the overfitting it prevents.
 TensorFlow is imported lazily.
 """
+
 from __future__ import annotations
 
 from datetime import datetime

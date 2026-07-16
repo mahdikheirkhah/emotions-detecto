@@ -1,4 +1,5 @@
 """Abstract base classes for model building and emotion classification."""
+
 from __future__ import annotations
 
 import abc

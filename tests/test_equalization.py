@@ -1,4 +1,5 @@
 """Unit tests for histogram-equalization / CLAHE preprocessing strategies."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,10 +13,10 @@ from src.emotion_detector.data.preprocessing import (
     build_normalizer,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _low_contrast_batch(n: int = 4, size: int = 48, seed: int = 0):
     """A batch of low-contrast 48x48 images (intensities squeezed into [100, 140])."""
@@ -45,6 +46,7 @@ def _cfg(strategy: str, clip=2.0, tile=8) -> dict:
 # ---------------------------------------------------------------------------
 # HistogramEqualizer
 # ---------------------------------------------------------------------------
+
 
 def test_histogram_equalizer_preserves_shape_and_dtype() -> None:
     X = _low_contrast_batch()
@@ -82,6 +84,7 @@ def test_histogram_equalizer_fit_returns_self() -> None:
 # ClaheEqualizer
 # ---------------------------------------------------------------------------
 
+
 def test_clahe_preserves_shape_and_dtype() -> None:
     X = _low_contrast_batch()
     out = ClaheEqualizer().transform(X)
@@ -108,6 +111,7 @@ def test_clahe_clip_limit_is_configurable() -> None:
 # unsupported shape
 # ---------------------------------------------------------------------------
 
+
 def test_equalizer_rejects_bad_shape() -> None:
     bad = np.zeros((2, 2, 2, 2), dtype=np.uint8)  # 4D
     with pytest.raises(ValueError, match="expects 2D .* or 3D"):
@@ -117,6 +121,7 @@ def test_equalizer_rejects_bad_shape() -> None:
 # ---------------------------------------------------------------------------
 # SequentialPreprocessor + dispatch
 # ---------------------------------------------------------------------------
+
 
 def test_sequential_chains_equalize_then_rescale() -> None:
     X = _low_contrast_batch()
@@ -150,6 +155,7 @@ def test_build_normalizer_still_supports_prior_options() -> None:
         RescalePreprocessor as R,
         StandardizePreprocessor,
     )
+
     assert isinstance(build_normalizer(_cfg("none")), IdentityPreprocessor)
     assert isinstance(build_normalizer(_cfg("rescale")), R)
     assert isinstance(build_normalizer(_cfg("standardize")), StandardizePreprocessor)

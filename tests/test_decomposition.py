@@ -1,4 +1,5 @@
 """Unit tests for the optional PCA decomposition stage."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -11,10 +12,10 @@ from src.emotion_detector.data.decomposition import (
     build_decomposer,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(stage_on: bool = False, n_components=0.95) -> dict:
     return {
@@ -33,6 +34,7 @@ def _images(n: int = 60, size: int = 8, seed: int = 0):
 # base is abstract
 # ---------------------------------------------------------------------------
 
+
 def test_base_decomposer_is_abstract() -> None:
     with pytest.raises(TypeError):
         BaseDecomposer()  # type: ignore[abstract]
@@ -41,6 +43,7 @@ def test_base_decomposer_is_abstract() -> None:
 # ---------------------------------------------------------------------------
 # IdentityReducer
 # ---------------------------------------------------------------------------
+
 
 def test_identity_returns_data_unchanged() -> None:
     X = _images()
@@ -57,6 +60,7 @@ def test_identity_fit_returns_self() -> None:
 # ---------------------------------------------------------------------------
 # PcaReducer
 # ---------------------------------------------------------------------------
+
 
 def test_pca_int_components_shape() -> None:
     X = _images()  # (60, 8, 8) → 64 features
@@ -104,6 +108,7 @@ def test_pca_flattens_images() -> None:
 # ---------------------------------------------------------------------------
 # build_decomposer dispatch
 # ---------------------------------------------------------------------------
+
 
 def test_build_decomposer_stage_off_returns_identity() -> None:
     assert isinstance(build_decomposer(_cfg(stage_on=False)), IdentityReducer)

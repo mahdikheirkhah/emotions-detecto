@@ -1,4 +1,5 @@
 """Unit tests for the config-driven model builders (skipped without TensorFlow)."""
+
 from __future__ import annotations
 
 import pytest
@@ -34,6 +35,7 @@ def _cfg(architecture="vgg_small", **model_over) -> dict:
 # base is abstract; builders are subclasses
 # ---------------------------------------------------------------------------
 
+
 def test_base_model_builder_is_abstract() -> None:
     with pytest.raises(TypeError):
         BaseModelBuilder()  # type: ignore[abstract]
@@ -47,6 +49,7 @@ def test_builders_are_base_subclasses() -> None:
 # ---------------------------------------------------------------------------
 # output shape / compilation
 # ---------------------------------------------------------------------------
+
 
 def test_vgg_small_output_shape() -> None:
     model = build_model(_cfg("vgg_small"), summary=False)
@@ -90,6 +93,7 @@ def test_num_conv_blocks_changes_depth() -> None:
 # ---------------------------------------------------------------------------
 # dispatch / error paths
 # ---------------------------------------------------------------------------
+
 
 def test_unknown_architecture_raises() -> None:
     with pytest.raises(ValueError, match="Unknown option"):

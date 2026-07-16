@@ -9,6 +9,7 @@ This module only *partitions* the data. Fitting any transform (standardization
 stats, PCA) happens **after** the split, on the training split only — computing
 statistics on the full set would leak test information into training.
 """
+
 from __future__ import annotations
 
 from typing import Tuple
@@ -55,9 +56,7 @@ def make_splits(
     y = np.asarray(y)
     usage = np.asarray(usage)
     if not (len(X) == len(y) == len(usage)):
-        raise ValueError(
-            f"X/y/usage length mismatch: {len(X)}, {len(y)}, {len(usage)}"
-        )
+        raise ValueError(f"X/y/usage length mismatch: {len(X)}, {len(y)}, {len(usage)}")
 
     try:
         val_size = cfg["split"]["val_size"]
@@ -74,9 +73,7 @@ def make_splits(
     test_idx = all_idx[usage != _TRAINING]
     pool_idx = all_idx[usage == _TRAINING]
     if len(pool_idx) == 0:
-        raise ValueError(
-            "No rows with Usage == 'Training' to build train/val from."
-        )
+        raise ValueError("No rows with Usage == 'Training' to build train/val from.")
 
     stratify = y[pool_idx] if stratify_on else None
     train_idx, val_idx = train_test_split(

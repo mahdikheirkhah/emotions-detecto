@@ -3,6 +3,7 @@
 The whole module is skipped where TensorFlow is unavailable (both to_tensors and
 make_dataset need Keras/tf.data).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -12,10 +13,10 @@ pytest.importorskip("tensorflow")
 
 from src.emotion_detector.data.pipeline import make_dataset, to_tensors
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(batch_size: int = 16, aug: bool = False, buffer: int = 1000) -> dict:
     return {
@@ -49,6 +50,7 @@ def _labels_in_order(ds):
 # to_tensors
 # ---------------------------------------------------------------------------
 
+
 def test_to_tensors_adds_channel_axis() -> None:
     X, y = _data()
     images, _ = to_tensors(X, y)
@@ -60,7 +62,7 @@ def test_to_tensors_one_hot_encodes() -> None:
     X, y = _data()
     _, onehot = to_tensors(X, y, num_classes=7)
     assert onehot.shape == (50, 7)
-    assert np.allclose(onehot.sum(axis=1), 1.0)      # each row sums to 1
+    assert np.allclose(onehot.sum(axis=1), 1.0)  # each row sums to 1
     assert np.array_equal(onehot.argmax(axis=1), y)  # argmax recovers the label
 
 
@@ -84,6 +86,7 @@ def test_to_tensors_length_mismatch_raises() -> None:
 # ---------------------------------------------------------------------------
 # make_dataset — shapes
 # ---------------------------------------------------------------------------
+
 
 def test_train_batch_shape() -> None:
     X, y = _data()
@@ -111,6 +114,7 @@ def test_batch_size_is_config_driven() -> None:
 # ---------------------------------------------------------------------------
 # make_dataset — shuffle behavior
 # ---------------------------------------------------------------------------
+
 
 def test_eval_dataset_not_shuffled() -> None:
     X, y = _data()

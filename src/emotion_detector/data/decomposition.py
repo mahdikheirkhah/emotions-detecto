@@ -5,6 +5,7 @@ Defaults **off**: a CNN keeps raw 48×48 images because convolutions exploit the
 for the MNIST logistic-regression baseline and as a teaching ablation
 (``stages.decomposition``). Components are fit on the **training split only**.
 """
+
 from __future__ import annotations
 
 import numpy as np

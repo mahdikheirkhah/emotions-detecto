@@ -6,6 +6,7 @@ dispatch: ``none`` (raw-pixel baseline), ``rescale`` (÷255 → [0, 1]), and
 **training split only** and reused on val/test to avoid leakage (CONTRIBUTING §8).
 The whole step is gated by the ``stages.preprocessing`` toggle.
 """
+
 from __future__ import annotations
 
 from typing import Callable, List

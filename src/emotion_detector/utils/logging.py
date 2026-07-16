@@ -7,6 +7,7 @@ Every module imports the logger from here:
 Call ``setup_logging(cfg)`` once at the top of each script entrypoint
 before any pipeline work begins.
 """
+
 from __future__ import annotations
 
 import sys

@@ -1,4 +1,5 @@
 """FER-2013 CSV loader — parses the pixels column into (N, H, W) arrays."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -86,7 +87,9 @@ class Fer2013Fetcher(BaseDatasetFetcher):
         if subset.empty:
             raise ValueError(f"No rows found for split '{split}' in {csv_path}.")
 
-        logger.info(f"Loading split '{split}': {len(subset):,} rows from {csv_path.name}")
+        logger.info(
+            f"Loading split '{split}': {len(subset):,} rows from {csv_path.name}"
+        )
 
         if subset["pixels"].isna().any():
             raise ValueError(f"NaN found in pixels column for split '{split}'.")
@@ -97,9 +100,7 @@ class Fer2013Fetcher(BaseDatasetFetcher):
         invalid_mask = (labels < 0) | (labels > 6)
         if invalid_mask.any():
             bad = np.unique(labels[invalid_mask]).tolist()
-            raise ValueError(
-                f"Labels out of range 0–6 in split '{split}': {bad}"
-            )
+            raise ValueError(f"Labels out of range 0–6 in split '{split}': {bad}")
 
         logger.info(
             f"Split '{split}' ready — images {images.shape} uint8, labels {labels.shape}"

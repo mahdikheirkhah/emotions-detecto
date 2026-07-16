@@ -11,6 +11,7 @@ For a deep CNN this is k× the training cost, so it defaults **off**
 The model is rebuilt fresh per fold via ``build_fn`` and scored with the #40
 ``evaluate``; only ``sklearn`` is required here (TF enters through ``build_fn``).
 """
+
 from __future__ import annotations
 
 from statistics import mean, pstdev

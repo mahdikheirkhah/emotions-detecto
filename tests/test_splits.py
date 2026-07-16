@@ -1,4 +1,5 @@
 """Unit tests for the no-leakage train/val/test split."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,10 +7,10 @@ import pytest
 
 from src.emotion_detector.data.splits import make_splits
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(val_size: float = 0.2, stratify: bool = True, seed: int = 42) -> dict:
     return {
@@ -44,6 +45,7 @@ def _ratios(y):
 # split composition
 # ---------------------------------------------------------------------------
 
+
 def test_test_set_comes_from_usage() -> None:
     X, y, usage = _data(n_train=100, n_test=40)
     _, _, _, _, X_test, _ = make_splits(_cfg(), X, y, usage)
@@ -60,6 +62,7 @@ def test_train_val_carved_from_training() -> None:
 # ---------------------------------------------------------------------------
 # no leakage — disjoint + complete
 # ---------------------------------------------------------------------------
+
 
 def test_splits_are_disjoint() -> None:
     X, y, usage = _data()
@@ -81,6 +84,7 @@ def test_splits_cover_all_rows() -> None:
 # stratification
 # ---------------------------------------------------------------------------
 
+
 def test_stratification_preserves_class_ratios() -> None:
     X, y, usage = _data(n_train=100, n_test=40)
     _, y_tr, _, y_val, _, _ = make_splits(_cfg(stratify=True), X, y, usage)
@@ -98,6 +102,7 @@ def test_stratify_off_still_runs() -> None:
 # ---------------------------------------------------------------------------
 # determinism
 # ---------------------------------------------------------------------------
+
 
 def test_deterministic_under_fixed_seed() -> None:
     X, y, usage = _data()
@@ -117,6 +122,7 @@ def test_different_seed_changes_val_membership() -> None:
 # ---------------------------------------------------------------------------
 # error paths
 # ---------------------------------------------------------------------------
+
 
 def test_length_mismatch_raises() -> None:
     X, y, usage = _data()

@@ -1,4 +1,5 @@
 """Unit tests for config-driven training callbacks (skipped without TensorFlow)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,6 +42,7 @@ def _by_type(callbacks, cls):
 # composition
 # ---------------------------------------------------------------------------
 
+
 def test_returns_all_callbacks(tmp_path: Path) -> None:
     callbacks = build_callbacks(_cfg(tmp_path))
     types = [type(c).__name__ for c in callbacks]
@@ -61,6 +63,7 @@ def test_creates_model_directory(tmp_path: Path) -> None:
 # EarlyStopping
 # ---------------------------------------------------------------------------
 
+
 def test_early_stopping_config(tmp_path: Path) -> None:
     es = _by_type(build_callbacks(_cfg(tmp_path)), cb.EarlyStopping)
     assert es.patience == 10
@@ -78,6 +81,7 @@ def test_early_stopping_can_be_ablated(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # TensorBoard
 # ---------------------------------------------------------------------------
+
 
 def test_tensorboard_present_and_logs_under_root(tmp_path: Path) -> None:
     tb = _by_type(build_callbacks(_cfg(tmp_path)), cb.TensorBoard)
@@ -100,6 +104,7 @@ def test_tensorboard_can_be_ablated(tmp_path: Path) -> None:
 # ModelCheckpoint
 # ---------------------------------------------------------------------------
 
+
 def test_model_checkpoint_config(tmp_path: Path) -> None:
     mc = _by_type(build_callbacks(_cfg(tmp_path)), cb.ModelCheckpoint)
     assert mc.save_best_only is True
@@ -110,6 +115,7 @@ def test_model_checkpoint_config(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # ReduceLROnPlateau
 # ---------------------------------------------------------------------------
+
 
 def test_reduce_lr_config(tmp_path: Path) -> None:
     rl = _by_type(build_callbacks(_cfg(tmp_path)), cb.ReduceLROnPlateau)
@@ -122,6 +128,7 @@ def test_reduce_lr_config(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # monitor is config-driven; missing key raises
 # ---------------------------------------------------------------------------
+
 
 def test_monitor_is_config_driven(tmp_path: Path) -> None:
     callbacks = build_callbacks(_cfg(tmp_path, monitor="val_accuracy"))

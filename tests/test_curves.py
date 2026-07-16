@@ -1,4 +1,5 @@
 """Unit tests for the learning-curves plot (matplotlib only — no TensorFlow)."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -35,6 +36,7 @@ def _overfit_history() -> dict:
 # plotting
 # ---------------------------------------------------------------------------
 
+
 def test_plot_produces_png(tmp_path: Path) -> None:
     out = _vla.plot_learning_curves(_overfit_history(), tmp_path / "curves.png")
     assert out.exists()
@@ -62,6 +64,7 @@ def test_plot_missing_loss_raises(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # early-stopping epoch detection
 # ---------------------------------------------------------------------------
+
 
 def test_best_epoch_is_val_loss_minimum() -> None:
     assert _vla._best_epoch(_overfit_history()) == 5  # 0-based → epoch 6

@@ -1,4 +1,5 @@
 """Config loader and dotted-key accessor for the Ablation-Driven Architecture."""
+
 from __future__ import annotations
 
 import functools

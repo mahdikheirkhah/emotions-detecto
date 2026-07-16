@@ -7,6 +7,7 @@ loss are prime tuning knobs (CONTRIBUTING §3).
 
 TensorFlow is imported lazily so importing this module is cheap.
 """
+
 from __future__ import annotations
 
 from typing import Any, List

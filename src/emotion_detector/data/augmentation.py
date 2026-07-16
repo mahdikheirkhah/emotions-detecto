@@ -12,6 +12,7 @@ create unnatural faces and are deliberately excluded.
 
 TensorFlow is imported lazily so the stage-off / zero-param paths work without it.
 """
+
 from __future__ import annotations
 
 from typing import Any

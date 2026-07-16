@@ -1,4 +1,5 @@
 """Verify the project directory layout required by Issue #1."""
+
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -31,7 +32,9 @@ def test_src_package_exists() -> None:
 def test_src_submodules_exist() -> None:
     base = ROOT / "src" / "emotion_detector"
     for submodule in ("data", "models", "video", "utils"):
-        assert (base / submodule / "__init__.py").is_file(), f"missing {submodule}/__init__.py"
+        assert (
+            base / submodule / "__init__.py"
+        ).is_file(), f"missing {submodule}/__init__.py"
 
 
 def test_tests_dir_exists() -> None:
@@ -40,7 +43,13 @@ def test_tests_dir_exists() -> None:
 
 def test_scripts_entrypoints_exist() -> None:
     scripts = ROOT / "scripts"
-    for name in ("train.py", "predict.py", "predict_live_stream.py", "preprocess.py", "validation_loss_accuracy.py"):
+    for name in (
+        "train.py",
+        "predict.py",
+        "predict_live_stream.py",
+        "preprocess.py",
+        "validation_loss_accuracy.py",
+    ):
         assert (scripts / name).is_file(), f"missing scripts/{name}"
 
 

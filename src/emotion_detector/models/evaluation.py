@@ -8,6 +8,7 @@ per-class precision/recall report. Which metrics to compute is driven by
 Only ``sklearn``/``numpy``/``matplotlib`` are used — the model is called through a
 duck-typed ``.predict``, so this module needs no TensorFlow import.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -48,8 +49,14 @@ def plot_confusion_matrix(cm: NDArray, out_path, class_names: List[str]) -> Path
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(7, 6))
     sns.heatmap(
-        cm, annot=True, fmt="d", cmap="Blues", cbar=False,
-        xticklabels=class_names, yticklabels=class_names, ax=ax,
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        cbar=False,
+        xticklabels=class_names,
+        yticklabels=class_names,
+        ax=ax,
     )
     ax.set_xlabel("predicted")
     ax.set_ylabel("true")
@@ -108,8 +115,12 @@ def evaluate(
 
     # Per-class precision/recall/F1 is always reported (CONTRIBUTING §8).
     results["classification_report"] = classification_report(
-        y_true, y_pred, labels=labels, target_names=names,
-        output_dict=True, zero_division=0,
+        y_true,
+        y_pred,
+        labels=labels,
+        target_names=names,
+        output_dict=True,
+        zero_division=0,
     )
 
     if plot and "confusion_matrix" in requested:
