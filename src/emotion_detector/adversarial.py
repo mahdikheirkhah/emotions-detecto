@@ -41,12 +41,17 @@ values (Ablation section 3); nothing here is hardcoded.
 
 from __future__ import annotations
 
-from typing import Dict, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
 
 from src.emotion_detector.models.labels import FER_EMOTIONS
+
+# grad_fn(x, target_index) -> d(loss)/d(x) (same shape as x); predict_fn(x) -> softmax.
+GradFn = Callable[[NDArray, int], NDArray]
+PredictFn = Callable[[NDArray], NDArray]
 
 
 def target_index(target_class: str, labels: Sequence[str] = FER_EMOTIONS) -> int:
@@ -112,3 +117,134 @@ def probabilities_report(
             f"expected {len(labels)} probabilities, got {vector.shape[0]}."
         )
     return {label: float(p) for label, p in zip(labels, vector)}
+
+
+# ===========================================================================
+# The attack (#58): FGSM / iterative-FGSM (BIM) toward a target class.
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class AttackResult:
+    """Outcome of an attack: the adversarial image, its perturbation, and both preds."""
+
+    adversarial: NDArray  # perturbed input, same shape as x, clipped to [0, 1]
+    perturbation: NDArray  # adversarial - original (its L-inf norm is <= epsilon)
+    iterations: int  # steps actually taken (1 for FGSM; <= `iterations` for BIM)
+    success: bool  # did argmax(adversarial) become the target class?
+    original_probs: NDArray  # softmax before the attack
+    adversarial_probs: NDArray  # softmax after the attack
+
+
+def fgsm_perturbation(gradient: NDArray, epsilon: float) -> NDArray:
+    """One signed FGSM step: ``epsilon * sign(gradient)`` (pure, no TF).
+
+    ``sign`` makes the step a fixed ``epsilon`` per pixel, so its L-infinity norm is
+    exactly ``epsilon`` — the imperceptibility budget.
+    """
+    return float(epsilon) * np.sign(np.asarray(gradient, dtype=float))
+
+
+def run_attack(
+    x: NDArray,
+    target_index: int,
+    grad_fn: GradFn,
+    predict_fn: PredictFn,
+    epsilon: float,
+    attack_type: str = "fgsm",
+    iterations: int = 10,
+    step_size: float | None = None,
+) -> AttackResult:
+    """Perturb *x* toward *target_index* until it flips (or the budget runs out).
+
+    **Targeted:** ``grad_fn`` returns ``d(loss)/d(x)`` for cross-entropy toward the
+    target, so to *raise* the target probability we step **against** it
+    (``x - sign(grad)``). The gradient is w.r.t. the pixels, model frozen -- the point.
+
+    * ``fgsm``: one step of size ``epsilon`` -- ``x - epsilon * sign(grad)``.
+    * ``bim`` (iterative FGSM): up to ``iterations`` small ``step_size`` steps (default
+      ``epsilon / iterations``), each re-clipped into the ``epsilon`` L-inf ball and
+      into ``[0, 1]``, stopping early once it flips: subtler than one big FGSM jump.
+
+    Args:
+        x: The source input, e.g. ``(48, 48, 1)`` normalized to ``[0, 1]``.
+        target_index: The class to flip the prediction *to*.
+        grad_fn / predict_fn: Injected model hooks (real Keras via
+            ``keras_attack_functions`` in production; fakes in tests).
+        epsilon: L-infinity perturbation budget.
+        attack_type: ``"fgsm"`` | ``"bim"``.
+        iterations / step_size: BIM only.
+
+    Returns:
+        An ``AttackResult``.
+
+    Raises:
+        ValueError: on an unknown ``attack_type`` or ``epsilon <= 0``.
+    """
+    if epsilon <= 0:
+        raise ValueError(f"epsilon must be > 0, got {epsilon}.")
+    original = np.asarray(x, dtype=float)
+    original_probs = np.asarray(predict_fn(original)).reshape(-1)
+
+    if attack_type == "fgsm":
+        adversarial = np.clip(
+            original - fgsm_perturbation(grad_fn(original, target_index), epsilon),
+            0.0,
+            1.0,
+        )
+        taken = 1
+    elif attack_type == "bim":
+        alpha = float(step_size) if step_size else epsilon / max(int(iterations), 1)
+        adversarial = original.copy()
+        taken = 0
+        for step in range(int(iterations)):
+            taken = step + 1
+            adversarial = adversarial - alpha * np.sign(
+                grad_fn(adversarial, target_index)
+            )
+            adversarial = np.clip(adversarial, original - epsilon, original + epsilon)
+            adversarial = np.clip(adversarial, 0.0, 1.0)
+            if int(np.argmax(predict_fn(adversarial))) == target_index:
+                break
+    else:
+        raise ValueError(f"unknown attack_type '{attack_type}' (use 'fgsm' or 'bim').")
+
+    adversarial_probs = np.asarray(predict_fn(adversarial)).reshape(-1)
+    return AttackResult(
+        adversarial=adversarial,
+        perturbation=adversarial - original,
+        iterations=taken,
+        success=int(np.argmax(adversarial_probs)) == target_index,
+        original_probs=original_probs,
+        adversarial_probs=adversarial_probs,
+    )
+
+
+def keras_attack_functions(model: Any) -> Tuple[GradFn, PredictFn]:
+    """Build ``(grad_fn, predict_fn)`` for a Keras model (``tf.GradientTape``, lazy TF).
+
+    ``grad_fn`` records the forward pass on a watched input tensor and returns
+    ``d(cross-entropy toward target)/d(input)`` by reverse-mode autodiff -- the input
+    gradient with the trained weights fixed. ``predict_fn`` is a plain forward pass.
+    """
+    import tensorflow as tf
+    from tensorflow.keras.losses import CategoricalCrossentropy
+
+    cce = CategoricalCrossentropy()
+    num_classes = int(model.output_shape[-1])
+
+    def grad_fn(x: NDArray, class_index: int) -> NDArray:
+        x_t = tf.convert_to_tensor(np.asarray(x, dtype=np.float32)[np.newaxis, ...])
+        target = tf.one_hot([int(class_index)], num_classes)
+        with tf.GradientTape() as tape:
+            tape.watch(x_t)
+            prediction = model(x_t, training=False)
+            loss = cce(target, prediction)
+        gradient = tape.gradient(loss, x_t)
+        return gradient.numpy()[0]
+
+    def predict_fn(x: NDArray) -> NDArray:
+        x_t = np.asarray(x, dtype=np.float32)[np.newaxis, ...]
+        return np.asarray(model(x_t, training=False)).reshape(-1)
+
+    return grad_fn, predict_fn

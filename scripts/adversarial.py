@@ -35,7 +35,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.emotion_detector.adversarial import (
+    AttackResult,
+    keras_attack_functions,
     probabilities_report,
+    run_attack,
     select_target_image,
     target_index,
 )
@@ -127,6 +130,78 @@ def _load_split(cfg: dict) -> Tuple[NDArray, NDArray]:
     return images_uint8, images_norm[..., np.newaxis].astype(np.float32)
 
 
+def save_attack_artifacts(cfg: dict, result: AttackResult) -> Dict[str, Any]:
+    """Save the original|perturbation|adversarial figure + the adversarial ``.npy``.
+
+    No TF. The perturbation is amplified for *display only* (its real values are ~eps,
+    near invisible) so the middle panel shows what changed. Fake result in tests.
+    """
+    adv = cfg["adversarial"]
+    comparison_path = Path(adv["comparison_path"])
+    array_path = Path(adv["adversarial_array_path"])
+    for path in (comparison_path, array_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    src_label = adv["target_class"]
+    tgt_label = adv["attack_target_class"]
+    src_idx = target_index(src_label)
+    tgt_idx = target_index(tgt_label)
+
+    adv_img = np.asarray(result.adversarial).reshape(48, 48)
+    pert = np.asarray(result.perturbation).reshape(48, 48)
+    original_img = adv_img - pert  # adversarial - perturbation == the source image
+    pert_view = 0.5 + pert / (
+        2 * (np.abs(pert).max() + 1e-8)
+    )  # centre at grey, amplify
+
+    orig_conf = float(np.asarray(result.original_probs).reshape(-1)[src_idx])
+    adv_conf = float(np.asarray(result.adversarial_probs).reshape(-1)[tgt_idx])
+
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3.4))
+    axes[0].imshow(original_img, cmap="gray", vmin=0, vmax=1)
+    axes[0].set_title(f"original: {src_label} {orig_conf:.0%}")
+    axes[1].imshow(pert_view, cmap="gray", vmin=0, vmax=1)
+    axes[1].set_title("perturbation (amplified)")
+    axes[2].imshow(adv_img, cmap="gray", vmin=0, vmax=1)
+    axes[2].set_title(f"adversarial: {tgt_label} {adv_conf:.0%}")
+    for ax in axes:
+        ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(comparison_path, dpi=120)
+    plt.close(fig)
+
+    np.save(array_path, adv_img[..., np.newaxis].astype(np.float32))
+    return {
+        "comparison_path": str(comparison_path),
+        "adversarial_array_path": str(array_path),
+    }
+
+
+def run_and_save_attack(cfg: dict, model: Any, x_source: NDArray) -> AttackResult:
+    """Run the configured FGSM/BIM attack on *x_source* and save the comparison."""
+    adv = cfg["adversarial"]
+    attack_target = target_index(adv["attack_target_class"])
+    grad_fn, predict_fn = keras_attack_functions(model)
+    result = run_attack(
+        x_source,
+        attack_target,
+        grad_fn,
+        predict_fn,
+        epsilon=adv["epsilon"],
+        attack_type=adv.get("attack_type", "fgsm"),
+        iterations=adv.get("iterations", 10),
+        step_size=adv.get("step_size"),
+    )
+    saved = save_attack_artifacts(cfg, result)
+    linf = float(np.abs(result.perturbation).max())
+    logger.info(
+        f"Attack {'flipped' if result.success else 'did NOT flip'} to "
+        f"{adv['attack_target_class']} in {result.iterations} step(s); "
+        f"L-inf={linf:.4f} (budget {adv['epsilon']}). → {saved['comparison_path']}"
+    )
+    return result
+
+
 def _load_keras_model(path: str) -> Any:
     """Load a saved ``.keras`` model (import kept local + patchable for tests)."""
     from tensorflow.keras.models import load_model
@@ -145,6 +220,7 @@ def main(config_path: str = "config.yaml") -> None:
         )
     model = _load_keras_model(model_path)
 
+    # Part 1 (#57): find the most confident source of the source class.
     images_uint8, images_norm = _load_split(cfg)
     split_name = cfg["adversarial"].get("scan_split", "test")
     logger.info(
@@ -152,15 +228,25 @@ def main(config_path: str = "config.yaml") -> None:
         f"{cfg['adversarial']['target_class']} source ..."
     )
     probabilities = model.predict(images_norm, verbose=0)
-
     summary = find_and_save(cfg, probabilities, images_uint8, images_norm)
     logger.info(
         f"Chosen source: index {summary['index']} — "
         f"{summary['label']} {summary['confidence']:.1%} → {summary['image_path']}"
     )
+
+    # Part 2 (#58): attack that source toward the flip target.
+    result = run_and_save_attack(cfg, model, images_norm[summary["index"]])
+
+    orig = probabilities_report(result.original_probs)
+    adv_probs = probabilities_report(result.adversarial_probs)
+    src, tgt = (
+        cfg["adversarial"]["target_class"],
+        cfg["adversarial"]["attack_target_class"],
+    )
+    print(f"Original:    {src} {orig[src]:.0%}")
     print(
-        f"Source image: {summary['label']} at {summary['confidence']:.0%} "
-        f"(saved to {summary['image_path']})"
+        f"Adversarial: {tgt} {adv_probs[tgt]:.0%} "
+        f"({'flipped' if result.success else 'NOT flipped — raise epsilon'})"
     )
 
 

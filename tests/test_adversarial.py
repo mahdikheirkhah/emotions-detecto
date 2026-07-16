@@ -15,7 +15,10 @@ import numpy as np
 import pytest
 
 from src.emotion_detector.adversarial import (
+    AttackResult,
+    fgsm_perturbation,
     probabilities_report,
+    run_attack,
     select_target_image,
     target_index,
 )
@@ -159,3 +162,207 @@ def test_find_and_save_no_confident_source_raises(tmp_path: Path) -> None:
     images_norm = (images_uint8[..., np.newaxis] / 255.0).astype(np.float32)
     with pytest.raises(ValueError):
         script.find_and_save(_cfg(tmp_path), probs, images_uint8, images_norm)
+
+
+# ---------------------------------------------------------------------------
+# fgsm_perturbation
+# ---------------------------------------------------------------------------
+
+
+def test_fgsm_perturbation_is_signed_epsilon_step() -> None:
+    grad = np.array([[-2.0, 0.5], [0.0, 3.0]])
+    step = fgsm_perturbation(grad, 0.1)
+    np.testing.assert_allclose(step, [[-0.1, 0.1], [0.0, 0.1]])
+    assert np.abs(step).max() <= 0.1  # L-infinity == epsilon
+
+
+# ---------------------------------------------------------------------------
+# run_attack — loop logic with fake grad/predict hooks (no TensorFlow)
+# ---------------------------------------------------------------------------
+
+_SAD = FER_EMOTIONS.index("Sad")  # 4
+
+
+def _const_grad(value):
+    return lambda x, class_index: np.full_like(np.asarray(x, float), float(value))
+
+
+def _fixed_predict(argmax_index):
+    def predict(x):
+        v = np.full(7, 0.1)
+        v[argmax_index] = 0.4
+        return v
+
+    return predict
+
+
+class _FlipAfter:
+    """Predicts *other* for the first *k* calls, then *target* (for BIM early-stop)."""
+
+    def __init__(self, target: int, other: int, k: int) -> None:
+        self.target, self.other, self.k, self.calls = target, other, k, 0
+
+    def __call__(self, x):
+        self.calls += 1
+        idx = self.target if self.calls > self.k else self.other
+        v = np.full(7, 0.05)
+        v[idx] = 0.6
+        return v
+
+
+def test_fgsm_steps_against_the_gradient_and_stays_bounded() -> None:
+    x = np.full((2, 2, 1), 0.5)
+    # Targeted: raise P(target) → step is x - eps*sign(grad); grad > 0 → move down.
+    result = run_attack(
+        x, _SAD, _const_grad(1.0), _fixed_predict(_SAD), epsilon=0.1, attack_type="fgsm"
+    )
+    np.testing.assert_allclose(result.adversarial, np.full((2, 2, 1), 0.4))
+    np.testing.assert_allclose(result.perturbation, np.full((2, 2, 1), -0.1))
+    assert np.abs(result.perturbation).max() <= 0.1 + 1e-9  # within budget
+    assert result.iterations == 1
+    assert result.success is True  # predict says argmax == Sad
+
+
+def test_adversarial_is_clipped_to_valid_pixel_range() -> None:
+    x = np.full((2, 2, 1), 0.05)  # near 0; a 0.1 step would go negative
+    result = run_attack(
+        x, _SAD, _const_grad(1.0), _fixed_predict(_SAD), epsilon=0.1, attack_type="fgsm"
+    )
+    assert result.adversarial.min() >= 0.0  # clipped to [0, 1]
+    np.testing.assert_allclose(result.adversarial, 0.0)
+
+
+def test_bim_stops_early_when_target_reached() -> None:
+    x = np.full((3, 3, 1), 0.5)
+    # calls: 1=Happy, 2=Happy, 3=Happy, 4=Sad -> flips on iter 3, loop stops there.
+    predict = _FlipAfter(target=_SAD, other=FER_EMOTIONS.index("Happy"), k=3)
+    result = run_attack(
+        x,
+        _SAD,
+        _const_grad(1.0),
+        predict,
+        epsilon=0.1,
+        attack_type="bim",
+        iterations=20,
+        step_size=0.01,
+    )
+    assert result.iterations == 3  # stopped as soon as it flipped, not all 20
+    assert result.success is True
+
+
+def test_bim_perturbation_stays_within_epsilon_ball() -> None:
+    x = np.full((3, 3, 1), 0.5)
+    predict = _fixed_predict(
+        FER_EMOTIONS.index("Happy")
+    )  # never flips → runs all steps
+    result = run_attack(
+        x,
+        _SAD,
+        _const_grad(1.0),
+        predict,
+        epsilon=0.05,
+        attack_type="bim",
+        iterations=50,  # 50 * 0.01 = 0.5 >> 0.05, so clipping must cap it
+        step_size=0.01,
+    )
+    assert np.abs(result.perturbation).max() <= 0.05 + 1e-9  # L-inf ball holds
+    assert result.iterations == 50
+    assert result.success is False
+
+
+@pytest.mark.parametrize("bad_epsilon", [0.0, -0.1])
+def test_run_attack_non_positive_epsilon_fails_loud(bad_epsilon) -> None:
+    with pytest.raises(ValueError):
+        run_attack(
+            np.zeros((2, 2, 1)),
+            _SAD,
+            _const_grad(1.0),
+            _fixed_predict(_SAD),
+            bad_epsilon,
+        )
+
+
+def test_run_attack_unknown_type_fails_loud() -> None:
+    with pytest.raises(ValueError):
+        run_attack(
+            np.zeros((2, 2, 1)),
+            _SAD,
+            _const_grad(1.0),
+            _fixed_predict(_SAD),
+            epsilon=0.1,
+            attack_type="teleport",
+        )
+
+
+# ---------------------------------------------------------------------------
+# keras_attack_functions + run_attack on a tiny real model (TensorFlow)
+# ---------------------------------------------------------------------------
+
+
+def test_attack_raises_target_probability_on_a_real_model() -> None:
+    tf = pytest.importorskip("tensorflow")
+    from src.emotion_detector.adversarial import keras_attack_functions
+
+    tf.random.set_seed(0)
+    from tensorflow import keras
+
+    model = keras.Sequential(
+        [
+            keras.layers.Input((48, 48, 1)),
+            keras.layers.Flatten(),
+            keras.layers.Dense(7, activation="softmax"),
+        ]
+    )
+    x = np.random.default_rng(0).random((48, 48, 1)).astype(np.float32)
+    grad_fn, predict_fn = keras_attack_functions(model)
+
+    result = run_attack(
+        x,
+        _SAD,
+        grad_fn,
+        predict_fn,
+        epsilon=0.1,
+        attack_type="bim",
+        iterations=25,
+        step_size=0.02,
+    )
+    # A targeted attack must raise the target-class probability, in budget and in range.
+    assert result.adversarial_probs[_SAD] > result.original_probs[_SAD]
+    assert np.abs(result.perturbation).max() <= 0.1 + 1e-5
+    assert 0.0 <= result.adversarial.min() and result.adversarial.max() <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# save_attack_artifacts (script part 2, fake result — no TF)
+# ---------------------------------------------------------------------------
+
+
+def test_save_attack_artifacts_writes_figure_and_array(tmp_path: Path) -> None:
+    script = _load_script()
+    adv_img = np.full((48, 48, 1), 0.6, np.float32)
+    pert = np.full((48, 48, 1), 0.04, np.float32)
+    original_probs = np.zeros(7)
+    original_probs[FER_EMOTIONS.index("Happy")] = 0.95
+    adversarial_probs = np.zeros(7)
+    adversarial_probs[_SAD] = 0.80
+    result = AttackResult(
+        adversarial=adv_img,
+        perturbation=pert,
+        iterations=7,
+        success=True,
+        original_probs=original_probs,
+        adversarial_probs=adversarial_probs,
+    )
+    cfg = {
+        "adversarial": {
+            "target_class": "Happy",
+            "attack_target_class": "Sad",
+            "comparison_path": str(tmp_path / "attack_comparison.png"),
+            "adversarial_array_path": str(tmp_path / "adversarial_array.npy"),
+        }
+    }
+    saved = script.save_attack_artifacts(cfg, result)
+    assert Path(saved["comparison_path"]).exists()  # side-by-side figure
+    loaded = np.load(saved["adversarial_array_path"])
+    assert loaded.shape == (48, 48, 1)  # the adversarial model input, for the record
+    np.testing.assert_allclose(loaded, adv_img)
