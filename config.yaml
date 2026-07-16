@@ -257,3 +257,11 @@ video:
   frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
   display_fps: true                # options: true | false
   window_title: "Emotion Detector"
+
+# ===== Streamlit dashboard (#56) =====
+# The polished dashboard (`streamlit run scripts/dashboard.py`): live feed + a bar chart of
+# all 7 emotion probabilities + a rolling emotion timeline. It reuses the model, detector,
+# and video.source above; only the UI-refresh knobs live here (Ablation §3).
+dashboard:
+  history_length: 100      # options: 50 | 100 | 300  (recent detections kept for the timeline)
+  refresh_rate: 5          # options: 1 | 5 | 10       (target UI frame updates per second)
