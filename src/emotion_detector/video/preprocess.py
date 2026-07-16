@@ -19,7 +19,7 @@ same knobs training uses), so the pipeline is one config switch away from any ab
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -64,6 +64,32 @@ class FacePreprocessor:
             normalizer if normalizer is not None else build_normalizer(cfg)
         )
 
+    def _detect_largest(self, frame: NDArray) -> FaceRect:
+        """The largest detected face box (the subject); NoFaceError if none.
+
+        Raises:
+            NoFaceError: if the detector finds no face (a frame to skip).
+            ValueError: if *frame* is malformed (propagated from the detector).
+        """
+        faces = self._detector.detect(frame)  # raises ValueError on a bad frame (§9)
+        if not faces:
+            raise NoFaceError("No face detected in frame.")
+        return max(faces, key=lambda b: b[2] * b[3])  # largest by area = the subject
+
+    def _crop_to_model_size(self, frame: NDArray, box: FaceRect) -> NDArray:
+        """Square-crop *box*, resize to ``image_size``, gray -> ``(size, size)`` uint8.
+
+        Raises:
+            ValueError: if OpenCV fails on a degenerate crop.
+        """
+        crop = self._square_crop(frame, box)
+        try:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            interp = cv2.INTER_AREA if crop.shape[0] >= self._size else cv2.INTER_LINEAR
+            return cv2.resize(gray, (self._size, self._size), interpolation=interp)
+        except cv2.error as exc:  # degenerate crop that slipped past the checks
+            raise ValueError(f"Could not preprocess the face crop: {exc}") from exc
+
     def process_frame(self, frame: NDArray) -> NDArray:
         """Return the FER-format ``(size, size)`` uint8 grayscale crop of the face.
 
@@ -76,17 +102,7 @@ class FacePreprocessor:
             ValueError: if *frame* is malformed (propagated from the detector) or OpenCV
                 fails on the crop.
         """
-        faces = self._detector.detect(frame)  # raises ValueError on a bad frame (§9)
-        if not faces:
-            raise NoFaceError("No face detected in frame.")
-        box = max(faces, key=lambda b: b[2] * b[3])  # largest by area = the subject
-        crop = self._square_crop(frame, box)
-        try:
-            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-            interp = cv2.INTER_AREA if crop.shape[0] >= self._size else cv2.INTER_LINEAR
-            return cv2.resize(gray, (self._size, self._size), interpolation=interp)
-        except cv2.error as exc:  # degenerate crop that slipped past the checks
-            raise ValueError(f"Could not preprocess the face crop: {exc}") from exc
+        return self._crop_to_model_size(frame, self._detect_largest(frame))
 
     def to_model_input(self, frame: NDArray) -> NDArray:
         """The classifier-ready array: ``process_frame`` + the fitted normalizer.
@@ -95,6 +111,24 @@ class FacePreprocessor:
         ``[0, 1]`` by default), so the live input distribution matches training's.
         """
         return self._normalizer.transform(self.process_frame(frame))
+
+    def locate_and_prepare(self, frame: NDArray) -> Tuple[FaceRect, NDArray]:
+        """Detect once, returning ``(face_box, model_ready_tensor)`` for the dashboard.
+
+        The overlay (#55) needs the **box** to draw the rectangle *and* the normalized
+        tensor to classify; doing both off a single detection avoids detecting twice.
+
+        Returns:
+            ``((x, y, w, h), tensor)`` — the largest face's pixel box and its normalized
+            ``(size, size)`` array (same as ``to_model_input``).
+
+        Raises:
+            NoFaceError: if no face is detected.
+            ValueError: if *frame* is malformed or the crop fails.
+        """
+        box = self._detect_largest(frame)
+        tensor = self._normalizer.transform(self._crop_to_model_size(frame, box))
+        return box, tensor
 
     @staticmethod
     def _square_crop(frame: NDArray, box: FaceRect) -> NDArray:

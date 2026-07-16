@@ -251,6 +251,9 @@ video:
                                    #   (headless/no-camera). "" disables the fallback (fail loud).
   predictions_per_second: 1        # options: 1 | 2 | 5  (real-time sampling cadence, #53;
                                    #   >=1 satisfies the audit's "1 prediction/second")
+  display: false                   # options: true | false  (#55 dashboard: show an OpenCV
+                                   #   window with the face box + emotion overlay. Needs a
+                                   #   GUI/display; --display / --no-display override this.)
   frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
   display_fps: true                # options: true | false
   window_title: "Emotion Detector"
