@@ -129,6 +129,35 @@ def test_no_face_error_is_not_a_value_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# locate_and_prepare — box + tensor from one detection (#55 dashboard)
+# ---------------------------------------------------------------------------
+
+
+def test_locate_and_prepare_returns_box_and_tensor() -> None:
+    pre = FacePreprocessor(
+        _cfg(normalization="rescale"), detector=_FakeDetector((20, 20, 40, 40))
+    )
+    box, tensor = pre.locate_and_prepare(np.full((100, 100, 3), 255, np.uint8))
+    assert box == (20, 20, 40, 40)  # the detected face box, for drawing
+    assert tensor.shape == (48, 48) and tensor.dtype == np.float32
+    assert 0.0 <= tensor.min() and tensor.max() <= 1.0  # same normalization as training
+
+
+def test_locate_and_prepare_picks_largest_box() -> None:
+    pre = FacePreprocessor(
+        _cfg(), detector=_FakeDetector((0, 0, 10, 10), (50, 50, 40, 40))
+    )
+    box, _ = pre.locate_and_prepare(np.zeros((100, 100, 3), np.uint8))
+    assert box == (50, 50, 40, 40)  # largest by area
+
+
+def test_locate_and_prepare_no_face_raises() -> None:
+    pre = FacePreprocessor(_cfg(), detector=_FakeDetector())
+    with pytest.raises(NoFaceError):
+        pre.locate_and_prepare(np.zeros((100, 100, 3), np.uint8))
+
+
+# ---------------------------------------------------------------------------
 # _square_crop — centering + edge padding
 # ---------------------------------------------------------------------------
 
