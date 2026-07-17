@@ -75,9 +75,12 @@ def _cfg(tmp_path: Path) -> dict:
             "clahe_clip_limit": 2.0,
             "clahe_tile_grid": 8,
         },
-        "model": {"num_classes": 7},
+        "model": {"num_classes": 7, "architecture": "vgg_small"},
         "evaluation": {"metrics": ["accuracy", "f1_macro", "confusion_matrix"]},
-        "paths": {"model_save_path": str(tmp_path / "model" / "final.keras")},
+        "paths": {
+            "model_save_path": str(tmp_path / "model" / "final.keras"),
+            "pretrained_model_save_path": str(tmp_path / "model" / "pretrained.keras"),
+        },
     }
 
 
@@ -116,3 +119,32 @@ def test_main_prints_exact_format(tmp_path, monkeypatch, capsys) -> None:
     out = capsys.readouterr().out
     assert re.search(r"^Accuracy on test set: \d+%$", out.strip(), re.MULTILINE)
     assert "Accuracy on test set: 100%" in out  # perfect model → 100%
+
+
+def test_main_routes_transfer_architecture_to_pretrained_model(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    # A transfer_* architecture must evaluate the separate pretrained model, not the
+    # from-scratch one (config_transfer.yaml + `predict.py config_transfer.yaml`).
+    predict = _load_predict()
+    cfg = _cfg(tmp_path)
+    cfg["model"]["architecture"] = "transfer_vgg16"
+    pretrained = Path(cfg["paths"]["pretrained_model_save_path"])
+    pretrained.parent.mkdir(parents=True, exist_ok=True)
+    pretrained.write_text("stub")  # only the pretrained file exists
+
+    loaded = {}
+
+    def _record_load(path):
+        loaded["path"] = path
+        return _PerfectModel()
+
+    monkeypatch.setattr(predict, "load_config", lambda _: cfg)
+    monkeypatch.setattr(predict, "setup_logging", lambda _cfg: None)
+    monkeypatch.setattr(predict, "Fer2013Fetcher", _LabelEncodingFetcher)
+    monkeypatch.setattr(predict, "_load_keras_model", _record_load)
+
+    predict.main("config_transfer.yaml")
+
+    assert loaded["path"] == str(pretrained)  # routed to the pretrained model path
+    assert "Accuracy on test set: 100%" in capsys.readouterr().out

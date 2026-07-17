@@ -1,8 +1,8 @@
 """Evaluate the trained model on the held-out test set (audit entrypoint).
 
-Loads ``final_emotion_model.keras``, reproduces the **exact training preprocessing**
-on the test split (fitted on train, never re-fit on test), and prints the required
-line for automated grading::
+Loads the trained ``.keras``, reproduces the **exact training preprocessing** on the
+test split (fitted on train, never re-fit on test), and prints the line the audit
+greps::
 
     Accuracy on test set: XX%
 
@@ -10,7 +10,12 @@ The test split is the ``Usage != Training`` rows (PublicTest + PrivateTest =
 test_with_emotions.csv) from the same seeded split the trainer used, so this is a
 single, final, untouched measurement — no tuning against it.
 
-Run:  ``python ./scripts/predict.py``
+Which model it loads is transfer-aware (``resolve_model_path``): a ``transfer_*``
+architecture evaluates the separate ``pretrained_*`` model. Pass an alternate config to
+score the transfer model built by ``config_transfer.yaml``::
+
+    python ./scripts/predict.py                    # the from-scratch model
+    python ./scripts/predict.py config_transfer.yaml   # the pretrained (transfer) model
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from src.emotion_detector.data.fer2013 import Fer2013Fetcher
 from src.emotion_detector.data.pipeline import to_tensors
 from src.emotion_detector.data.preprocessing import build_normalizer
 from src.emotion_detector.data.splits import make_splits
+from src.emotion_detector.models.classifier import resolve_model_path
 from src.emotion_detector.models.evaluation import evaluate
 from src.emotion_detector.utils.config import load_config
 from src.emotion_detector.utils.logging import logger, setup_logging
@@ -86,7 +92,7 @@ def main(config_path: str = "config.yaml") -> None:
     cfg = load_config(config_path)
     setup_logging(cfg)
 
-    model_path = cfg["paths"]["model_save_path"]
+    model_path = resolve_model_path(cfg)  # pretrained_* for a transfer_* architecture
     if not Path(model_path).exists():
         raise FileNotFoundError(
             f"No trained model at {model_path}. Run scripts/train.py first."
@@ -106,4 +112,6 @@ def main(config_path: str = "config.yaml") -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Optional config path, e.g. `python scripts/predict.py config_transfer.yaml` to
+    # evaluate the pretrained (transfer) model instead of the from-scratch one.
+    main(sys.argv[1] if len(sys.argv) > 1 else "config.yaml")
