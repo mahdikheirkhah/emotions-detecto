@@ -1,12 +1,12 @@
 {
   "model_file": "results/model/final_emotion_model.keras",
-  "content_sha256": "da06b36cf9ae342bac55b95105d344c7cad85f678ab1b2fa555b25c8a92ed26b",
+  "content_sha256": "4cb085d7d01b6168b95a66333678d20a6de9e67a2bf33436435254aede8f1e0f",
   "architecture": "vgg_small",
   "num_classes": 7,
   "seed": 42,
-  "generated_utc": "2026-07-05T18:42:47+00:00",
-  "epochs_trained": 65,
-  "best_epoch": 55,
-  "best_val_loss": 0.9735,
-  "best_val_accuracy": 0.64
+  "generated_utc": "2026-07-18T15:44:30+00:00",
+  "epochs_trained": 69,
+  "best_epoch": 59,
+  "best_val_loss": 0.9789,
+  "best_val_accuracy": 0.6315
 }

@@ -234,9 +234,55 @@ face_detector:
   min_size: [30, 30]               # options: [24,24] | [30,30] | [48,48]
   confidence_threshold: 0.5        # options: 0.3 | 0.5 | 0.7  (dnn backend only)
 
+# ===== Preprocessing-test deliverable (functional test, Issue #52) =====
+# scripts/preprocess.py samples ~sample_fps frames/sec from a >=20s face video and, for
+# each detected face, saves a 48x48 grayscale crop to paths.preprocessing_test_dir. The
+# detector and output size are SHARED with training (preprocessing.image_size,
+# face_detector.*), so the live crop matches the FER-2013 training format exactly (§3).
+preprocessing_test:
+  input_video: "data/sample_video.mp4"  # >=20s face video to sample (CLI arg overrides)
+  sample_fps: 1                          # options: 1 | 2   (frames sampled per second)
+  min_images: 20                         # deliverable contract: >= this many face images
+
 # ===== Video / live stream =====
 video:
   source: 0                        # options: 0 (webcam) | "path/to/video.mp4"
+  fallback_path: "data/sample_video.mp4"  # recorded video used when `source` won't open
+                                   #   (headless/no-camera). "" disables the fallback (fail loud).
+  predictions_per_second: 1        # options: 1 | 2 | 5  (real-time sampling cadence, #53;
+                                   #   >=1 satisfies the audit's "1 prediction/second")
+  display: false                   # options: true | false  (#55 dashboard: show an OpenCV
+                                   #   window with the face box + emotion overlay. Needs a
+                                   #   GUI/display; --display / --no-display override this.)
   frame_skip: 2                    # options: 1 | 2 | 5  (process every Nth frame)
   display_fps: true                # options: true | false
   window_title: "Emotion Detector"
+
+# ===== Streamlit dashboard (#56) =====
+# The polished dashboard (`streamlit run scripts/dashboard.py`): live feed + a bar chart of
+# all 7 emotion probabilities + a rolling emotion timeline. It reuses the model, detector,
+# and video.source above; only the UI-refresh knobs live here (Ablation §3).
+dashboard:
+  history_length: 100      # options: 50 | 100 | 300  (recent detections kept for the timeline)
+  refresh_rate: 5          # options: 1 | 5 | 10       (target UI frame updates per second)
+
+# ===== Adversarial attack (bonus — #57 setup / #58 FGSM attack) =====
+# "Hack the CNN": #57 picks a source image the model is very sure is `target_class`; #58
+# perturbs it by `epsilon * sign(gradient)` to flip the prediction. Seeded + reproducible;
+# every knob here (Ablation §3). See src/emotion_detector/adversarial.py for the FGSM note.
+adversarial:
+  target_class: "Happy"              # options: any FER emotion (the class the source must read)
+  source_confidence_threshold: 0.9   # options: 0.8 | 0.9 | 0.95  (min model confidence to pick a source)
+  scan_split: "test"                 # options: test | train  (which split to search for a source image)
+  # --- The attack (#58): flip the source to `attack_target_class` with a bounded nudge ---
+  attack_target_class: "Sad"         # options: any FER emotion (the class to flip the source TO)
+  attack_type: "bim"                 # options: fgsm | bim  (bim = iterative FGSM, subtler)
+  epsilon: 0.05                      # options: 0.01 | 0.03 | 0.05 | 0.1  (L-inf budget on [0,1];
+                                     #   the strength knob — raise it if the flip doesn't land)
+  iterations: 30                     # options: any int   (bim only: max small steps)
+  step_size: 0.005                   # options: any float (bim only: per-step size, <= epsilon)
+  source_image_path: "results/adversarial/source_image.png"
+  source_array_path: "results/adversarial/source_array.npy"
+  source_probs_path: "results/adversarial/source_probabilities.json"
+  comparison_path: "results/adversarial/attack_comparison.png"
+  adversarial_array_path: "results/adversarial/adversarial_array.npy"
