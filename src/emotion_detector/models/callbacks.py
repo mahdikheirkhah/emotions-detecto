@@ -5,7 +5,9 @@ Builds the three callbacks the subject requires:
 * **EarlyStopping** — halt when validation loss stops improving, and restore the
   best weights (regularization: stop before the model memorizes the train set).
 * **ModelCheckpoint** — persist the best model to disk, so a crash or a late-epoch
-  overfit never loses the good weights.
+  overfit never loses the good weights. The target is transfer-aware
+  (``resolve_model_path``): a ``transfer_*`` run checkpoints to its own
+  ``pretrained_*`` path and never overwrites the from-scratch model.
 * **ReduceLROnPlateau** — drop the learning rate when val loss plateaus, which can
   unlock further improvement by taking finer steps.
 
@@ -28,6 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List
 
+from src.emotion_detector.models.classifier import resolve_model_path
 from src.emotion_detector.utils.logging import logger
 
 
@@ -52,8 +55,10 @@ def build_callbacks(cfg: dict) -> List[Any]:
     """Assemble the training callbacks from config.
 
     Args:
-        cfg: Loaded config dict (reads the ``callbacks`` block and
-             ``paths.model_save_path``).
+        cfg: Loaded config dict. Reads the ``callbacks`` block, ``paths.*``, and —
+             transfer-aware via ``resolve_model_path`` — ``model.architecture`` to
+             route the checkpoint: a ``transfer_*`` run checkpoints to
+             ``pretrained_model_save_path``, never the from-scratch model.
 
     Returns:
         A list of ``keras.callbacks.Callback`` — EarlyStopping (unless ablated),
@@ -73,7 +78,9 @@ def build_callbacks(cfg: dict) -> List[Any]:
         lr_patience = c["reduce_lr_patience"]
         lr_factor = c["reduce_lr_factor"]
         min_lr = c["min_lr"]
-        save_path = Path(cfg["paths"]["model_save_path"])
+        # Transfer-aware: a transfer_* run checkpoints to its own pretrained_* path,
+        # so it never overwrites the from-scratch final_emotion_model.keras (Issue #46).
+        save_path = Path(resolve_model_path(cfg))
         tb_root = Path(cfg["paths"]["tensorboard_dir"])
     except KeyError as exc:
         raise KeyError(

@@ -13,7 +13,13 @@ from tensorflow.keras import callbacks as cb
 from src.emotion_detector.models.callbacks import build_callbacks
 
 
-def _cfg(tmp_path, early_stopping=True, monitor="val_loss", tensorboard=True) -> dict:
+def _cfg(
+    tmp_path,
+    early_stopping=True,
+    monitor="val_loss",
+    tensorboard=True,
+    architecture="vgg_small",
+) -> dict:
     return {
         "callbacks": {
             "monitor": monitor,
@@ -24,11 +30,12 @@ def _cfg(tmp_path, early_stopping=True, monitor="val_loss", tensorboard=True) ->
             "reduce_lr_factor": 0.5,
             "min_lr": 1e-6,
         },
-        "model": {"architecture": "vgg_small"},
+        "model": {"architecture": architecture},
         "preprocessing": {"normalization": "rescale"},
         "stages": {"augmentation": True, "cleaning": True},
         "paths": {
             "model_save_path": str(tmp_path / "model" / "final.keras"),
+            "pretrained_model_save_path": str(tmp_path / "model" / "pretrained.keras"),
             "tensorboard_dir": str(tmp_path / "tb"),
         },
     }
@@ -110,6 +117,18 @@ def test_model_checkpoint_config(tmp_path: Path) -> None:
     assert mc.save_best_only is True
     assert mc.filepath.endswith("final.keras")
     assert mc.monitor == "val_loss"
+
+
+def test_model_checkpoint_routes_transfer_to_pretrained(tmp_path: Path) -> None:
+    # A transfer_* architecture must checkpoint to the SEPARATE pretrained model path,
+    # never the from-scratch final_emotion_model.keras. Without this routing the best-
+    # weights checkpoint silently overwrites the scratch model during a transfer run.
+    mc = _by_type(
+        build_callbacks(_cfg(tmp_path, architecture="transfer_vgg16")),
+        cb.ModelCheckpoint,
+    )
+    assert mc.filepath.endswith("pretrained.keras")
+    assert not mc.filepath.endswith("final.keras")
 
 
 # ---------------------------------------------------------------------------
