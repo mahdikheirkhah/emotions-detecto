@@ -207,14 +207,14 @@ The graded model is the from-scratch **`vgg_small`** CNN (seed 42, early-stopped
 | metric | value |
 |--------|-------|
 | architecture | `vgg_small` (3 VGG-style conv blocks + dense head) |
-| best epoch | 55 / 65 trained (early stopping) |
-| best validation accuracy | **~64%** |
-| best validation loss | 0.9735 |
+| best epoch | 59 / 69 trained (early stopping) |
+| best validation accuracy | **63%** (peak 64%) |
+| best validation loss | 0.9789 |
 
 (from `results/model/final_emotion_model_manifest.json`.) The exact **held-out test
 accuracy** is printed by `python scripts/predict.py` (`Accuracy on test set: XX%`) — a
 single, final measurement on data never used for tuning. For context, human agreement on
-FER-2013 is ~65±5%, so a ~64% from-scratch CNN is competitive.
+FER-2013 is ~65±5%, so a ~63% from-scratch CNN is competitive.
 
 - **Learning curves:** `python scripts/validation_loss_accuracy.py` →
   `results/model/learning_curves.png` (train vs val loss/accuracy — the gap shows how much

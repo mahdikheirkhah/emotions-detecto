@@ -37,6 +37,23 @@ def resolve_model_path(cfg: dict) -> str:
     return paths["model_save_path"]
 
 
+def resolve_history_path(cfg: dict) -> str:
+    """The training-history JSON path for the configured architecture (transfer-aware).
+
+    Sits in the model directory next to the ``.keras`` and mirrors ``resolve_model_path``:
+    a ``transfer_*`` run writes ``pre_trained_history.json`` so it never overwrites the
+    from-scratch run's ``history.json`` (Issue #46). Both ``train.py`` (writer) and
+    ``validation_loss_accuracy.py`` (learning-curve reader) route through this.
+    """
+    model_dir = os.path.dirname(resolve_model_path(cfg))
+    name = (
+        "pre_trained_history.json"
+        if cfg["model"]["architecture"].startswith("transfer")
+        else "history.json"
+    )
+    return os.path.join(model_dir, name)
+
+
 class KerasEmotionClassifier(BaseEmotionClassifier):
     """Run a trained Keras model on a single preprocessed face crop.
 
