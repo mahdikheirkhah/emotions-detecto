@@ -54,6 +54,22 @@ def resolve_history_path(cfg: dict) -> str:
     return os.path.join(model_dir, name)
 
 
+def resolve_confusion_matrix_path(cfg: dict) -> str:
+    """The confusion-matrix PNG path for the configured architecture (transfer-aware).
+
+    Mirrors ``resolve_history_path``: a ``transfer_*`` run writes
+    ``pre_trained_confusion_matrix.png`` so evaluating the transfer model never
+    overwrites the from-scratch model's ``confusion_matrix.png`` (Issue #46).
+    """
+    model_dir = os.path.dirname(resolve_model_path(cfg))
+    name = (
+        "pre_trained_confusion_matrix.png"
+        if cfg["model"]["architecture"].startswith("transfer")
+        else "confusion_matrix.png"
+    )
+    return os.path.join(model_dir, name)
+
+
 class KerasEmotionClassifier(BaseEmotionClassifier):
     """Run a trained Keras model on a single preprocessed face crop.
 

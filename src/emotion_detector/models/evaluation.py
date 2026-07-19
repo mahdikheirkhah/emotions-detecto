@@ -23,6 +23,7 @@ from sklearn.metrics import (
     f1_score,
 )
 
+from src.emotion_detector.models.classifier import resolve_confusion_matrix_path
 from src.emotion_detector.models.labels import FER_EMOTIONS  # single source of truth
 from src.emotion_detector.utils.logging import logger
 
@@ -124,7 +125,9 @@ def evaluate(
     )
 
     if plot and "confusion_matrix" in requested:
-        cm_path = Path(cfg["paths"]["model_save_path"]).parent / "confusion_matrix.png"
+        # Transfer-aware (Issue #46): a transfer_* run writes its own
+        # pre_trained_confusion_matrix.png, never overwriting the scratch model's.
+        cm_path = resolve_confusion_matrix_path(cfg)
         results["confusion_matrix_path"] = str(
             plot_confusion_matrix(cm, cm_path, names)
         )

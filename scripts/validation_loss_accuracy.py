@@ -119,4 +119,6 @@ def main(config_path: str = "config.yaml") -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Optional config path, e.g. `python scripts/validation_loss_accuracy.py
+    # config_transfer.yaml` to plot the transfer model's curves instead.
+    main(sys.argv[1] if len(sys.argv) > 1 else "config.yaml")

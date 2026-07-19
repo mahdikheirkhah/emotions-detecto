@@ -12,6 +12,7 @@ import pytest
 
 from src.emotion_detector.models.classifier import (
     KerasEmotionClassifier,
+    resolve_confusion_matrix_path,
     resolve_history_path,
     resolve_model_path,
 )
@@ -83,6 +84,19 @@ def test_resolve_transfer_history_path() -> None:
     # from-scratch run's history.json / learning curves (Issue #46).
     assert resolve_history_path(_cfg("transfer_vgg16")).endswith(
         "pre_trained_history.json"
+    )
+
+
+def test_resolve_scratch_confusion_matrix_path() -> None:
+    path = resolve_confusion_matrix_path(_cfg("vgg_small"))
+    assert path.endswith("confusion_matrix.png")
+    assert not path.endswith("pre_trained_confusion_matrix.png")
+
+
+def test_resolve_transfer_confusion_matrix_path() -> None:
+    # Evaluating the transfer model must not overwrite the scratch confusion matrix.
+    assert resolve_confusion_matrix_path(_cfg("transfer_vgg16")).endswith(
+        "pre_trained_confusion_matrix.png"
     )
 
 
