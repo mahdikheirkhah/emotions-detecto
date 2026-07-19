@@ -33,6 +33,7 @@ from src.emotion_detector.data.preprocessing import build_normalizer
 from src.emotion_detector.data.splits import make_splits
 from src.emotion_detector.models.builders import build_model
 from src.emotion_detector.models.callbacks import build_callbacks
+from src.emotion_detector.models.classifier import resolve_history_path
 from src.emotion_detector.utils.config import load_config
 from src.emotion_detector.utils.logging import logger, setup_logging
 from src.emotion_detector.utils.seeding import set_global_seed
@@ -208,7 +209,9 @@ def _save_outputs(model: Any, history: Any, cfg: dict) -> None:
     model_path.parent.mkdir(parents=True, exist_ok=True)
     model.save(model_path)  # early stopping already restored the best weights
 
-    history_path = model_path.parent / "history.json"
+    # Transfer-aware (Issue #46): a transfer_* run writes pre_trained_history.json so it
+    # never overwrites the from-scratch run's history.json / learning curves.
+    history_path = Path(resolve_history_path(cfg))
     serializable = {
         key: [float(v) for v in values] for key, values in history.history.items()
     }

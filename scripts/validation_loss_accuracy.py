@@ -24,6 +24,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from src.emotion_detector.models.classifier import resolve_history_path
 from src.emotion_detector.utils.config import load_config
 from src.emotion_detector.utils.logging import logger, setup_logging
 
@@ -100,7 +101,7 @@ def main(config_path: str = "config.yaml") -> None:
     cfg = load_config(config_path)
     setup_logging(cfg)
 
-    history_path = Path(cfg["paths"]["model_save_path"]).parent / "history.json"
+    history_path = Path(resolve_history_path(cfg))  # transfer-aware (Issue #46)
     if not history_path.exists():
         raise FileNotFoundError(
             f"No history at {history_path}. Run scripts/train.py first."
@@ -118,4 +119,6 @@ def main(config_path: str = "config.yaml") -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # Optional config path, e.g. `python scripts/validation_loss_accuracy.py
+    # config_transfer.yaml` to plot the transfer model's curves instead.
+    main(sys.argv[1] if len(sys.argv) > 1 else "config.yaml")

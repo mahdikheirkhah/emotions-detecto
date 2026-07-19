@@ -30,7 +30,7 @@ def _onehot(indices, n=7):
 
 def _cfg(tmp_path: Path, metrics=None, num_classes=7) -> dict:
     return {
-        "model": {"num_classes": num_classes},
+        "model": {"num_classes": num_classes, "architecture": "vgg_small"},
         "evaluation": {
             "metrics": metrics or ["accuracy", "f1_macro", "confusion_matrix"]
         },

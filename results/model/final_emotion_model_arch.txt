@@ -7,8 +7,9 @@
  Task     : classify a 48x48 grayscale face into 1 of 7 emotions
             (Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral)
  Model    : vgg_small — 1,470,247 params (5.61 MB); trainable 1,468,839
- Result   : best epoch 55 of 65 (early-stopped); val_accuracy 0.64,
-            val_loss 0.9735.  Target (>60% test accuracy, no overfitting): MET.
+ Result   : best epoch 59 of 69 (early-stopped); val_accuracy 0.6315,
+            val_loss 0.9789 (peak val_accuracy 0.6397).  Target (>60% test
+            accuracy, no overfitting): MET.
 --------------------------------------------------------------------------------
  This is the FINAL record (was a DRAFT in #32; the iteration history below is the
  ablation log this issue adds). Every knob is a config.yaml option (CONTRIBUTING §3).
@@ -145,8 +146,8 @@
 
    (g) CALLBACKS — EarlyStopping(restore_best_weights) + ReduceLROnPlateau(factor 0.5).
        LR dropped 1e-3 -> 5e-4 -> 2.5e-4 -> ... as val_loss plateaued; the best weights
-       came from epoch 55, and training stopped at 65 (patience exhausted) — the model
-       is the epoch-55 checkpoint, NOT the last epoch.
+       came from epoch 59, and training stopped at 69 (patience exhausted) — the model
+       is the epoch-59 checkpoint, NOT the last epoch.
 
    (h) HYPERPARAMETER SEARCH (#43/#44; results/tuning/tuning_results.json).
        Random search over {learning_rate, batch_size, dropout_rate, filters_start,
@@ -159,7 +160,7 @@
 
 7. FINAL RESULTS & REPRODUCIBILITY
 --------------------------------------------------------------------------------
-   * Validation: best epoch 55/65, val_accuracy 0.64, val_loss 0.9735 (history.json).
+   * Validation: best epoch 59/69, val_accuracy 0.6315, val_loss 0.9789 (history.json).
    * Test: run `python scripts/predict.py` for the graded "Accuracy on test set: XX%"
      on the held-out PublicTest+PrivateTest split (target > 60%).
    * The model IS the ModelCheckpoint(save_best_only, monitor=val_loss) best — early

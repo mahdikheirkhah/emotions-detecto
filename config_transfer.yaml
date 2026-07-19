@@ -48,7 +48,7 @@ paths:
   logs_dir: "logs/"
   model_save_path: "results/model/final_emotion_model.keras"
   arch_txt_path: "results/model/architecture.txt"
-  learning_curves_path: "results/model/learning_curves.png"
+  learning_curves_path: "results/model/pre_trained_learning_curves.png"  # transfer curves, kept separate from the scratch model's
   tensorboard_dir: "logs/tensorboard/"
   # Transfer-learning artifacts (used only when model.architecture is a transfer_* option),
   # kept separate so a transfer run never overwrites the from-scratch model above.
