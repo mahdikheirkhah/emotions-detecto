@@ -94,6 +94,16 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+- **Trained models (Git LFS) — required before `predict.py`, the live stream, or the
+  dashboard.** The `.keras` models are stored with Git LFS, so a fresh clone only pulls
+  small text *pointers*. Fetch the real files once:
+  ```bash
+  git lfs install
+  git lfs pull            # downloads final_emotion_model.keras (+ the transfer model)
+  ```
+  Sanity check: `results/model/final_emotion_model.keras` should be **~18 MB**, not a few
+  hundred bytes. (Its sha256 is recorded in `final_emotion_model_manifest.json`; a pointer
+  stub or a half-trained file makes the model predict ~1/7 for every class.)
 - **Dataset:** downloaded automatically on the first `train.py` / `predict.py` run.
 - **DNN face model (optional):** only needed for `face_detector.backend: dnn`:
   ```bash
@@ -120,13 +130,14 @@ summary; logs scalars + the graph to TensorBoard.
 ### Predict (evaluate on the held-out test set)
 
 ```bash
-python scripts/predict.py
+python scripts/predict.py                        # from-scratch model → confusion_matrix.png
+python scripts/predict.py config_transfer.yaml   # transfer model → pre_trained_confusion_matrix.png
 ```
 Reproduces the exact training preprocessing on the test split and prints the graded line:
 ```
 Accuracy on test set: XX%
 ```
-(plus macro-F1 and a confusion matrix under `results/model/`).
+(plus macro-F1 and a confusion matrix under `results/model/` — a separate file per model).
 
 ### Preprocess (the functional `preprocessing_test`)
 
@@ -156,13 +167,18 @@ No webcam? It falls back to `video.fallback_path` automatically.
 ```bash
 streamlit run scripts/dashboard.py
 ```
-Live feed + the current emotion + a bar chart over all 7 probabilities + a rolling
-emotion-over-time timeline (history persisted in `st.session_state`).
+Pick a **Source** in the sidebar — everything renders inside the browser (boxed face +
+current emotion + a bar chart over all 7 probabilities + a rolling emotion timeline):
+
+- **Upload a video** — process an `.mp4/.mov/.avi` frame by frame (most reliable; no camera permission).
+- **Webcam · snapshot** — classify one photo from the *browser* camera (the reliable path on macOS).
+- **Webcam · live** — continuous OpenCV webcam stream.
 
 ### Other tools
 
 ```bash
-python scripts/validation_loss_accuracy.py   # → results/model/learning_curves.png
+python scripts/validation_loss_accuracy.py                      # → learning_curves.png (scratch)
+python scripts/validation_loss_accuracy.py config_transfer.yaml # → pre_trained_learning_curves.png (transfer)
 python scripts/tune.py                        # hyperparameter search, persists the winner to config
 python scripts/optimize.py                    # optional pruning / TFLite quantization (with accuracy check)
 python scripts/finalize_model.py              # writes the final-model manifest + snapshot
@@ -227,6 +243,55 @@ FER-2013 is ~65±5%, so a ~63% from-scratch CNN is competitive.
   (Disgust/Fear are the hardest classes — expected, they are the rarest).
 - **EDA figures:** every dataset figure referenced in [`data.md`](data.md) is under
   `results/eda/`.
+
+---
+
+## Audit — how to verify every requirement
+
+> **Before anything:** `git lfs install && git lfs pull` (fetch the real `.keras`
+> models), then `poetry install` (or `pip install -r requirements.txt`). The FER-2013
+> dataset auto-downloads on the first `predict.py` run.
+
+### Preliminary
+
+| Requirement | Where / how to check |
+|---|---|
+| Structure matches the subject | `scripts/{train,predict,predict_live_stream,preprocess,validation_loss_accuracy}.py`, `results/model/`, `results/preprocessing_test/`, `data/` — see [Project structure](#project-structure) |
+| README explains how to run + the global approach | This file — [Overview](#overview) + [Running the pipeline](#running-the-pipeline) |
+| All libraries + versions present | `requirements.txt` (fully pinned) + `pyproject.toml` |
+| Text files explain the architectures | `results/model/final_emotion_model_arch.txt` (scratch) · `results/model/pre_trained_model_architecture.txt` (transfer) |
+
+### CNN emotion classifier
+
+| Requirement | Where / how to check |
+|---|---|
+| Trained only on the training set | Test split is `Usage != Training` (PublicTest+PrivateTest), seeded; the normalizer is fit on the **train** split only (`scripts/train.py` / `scripts/predict.py`) |
+| Test accuracy > 60% | `python scripts/predict.py` → `Accuracy on test set: 6X%` |
+| Learning curves prove no overfitting | `results/model/learning_curves.png` (regen: `python scripts/validation_loss_accuracy.py`) — val loss flattens while train keeps dropping |
+| Training stopped early enough | Same figure: early-stop line at **epoch 59/69** (min val_loss, `restore_best_weights`) |
+| TensorBoard screenshot | `results/model/tensorboard.png` (live: `tensorboard --logdir logs/tensorboard`) |
+| Doc explains architecture choice + prior iterations | `results/model/final_emotion_model_arch.txt` — §2 (design) + §6 (iteration/ablation log) |
+| `python ./scripts/predict.py` runs, returns > 60% | `Accuracy on test set: 6X%` |
+
+### Face detection on the video stream
+
+| Requirement | Where / how to check |
+|---|---|
+| ≥20s video → ≥20 preprocessed images in a separate folder | `python scripts/preprocess.py your_face_video.mp4` → `results/preprocessing_test/image0.png …` |
+| All images contain a face | A frame is saved only after a cv2 detection (no-face frames are skipped) |
+| Reshaped + centered on the face | Square, centered crop → resize (`src/emotion_detector/video/preprocess.py`) |
+| Face detector imported via cv2 | `cv2.CascadeClassifier` (Haar) / `cv2.dnn` (SSD) |
+| Converted to 48×48 grayscale | `cv2.cvtColor(..., COLOR_BGR2GRAY)` + `cv2.resize(..., (48, 48))` |
+| Webcam issue → recorded fallback | `VideoSource` auto-falls back to `video.fallback_path` |
+| `python ./scripts/predict_live_stream.py` runs + right format | `Reading video stream …` / `Preprocessing …` / `HH:MM:SSs : Happy , 73%` |
+
+### Bonus — adversarial attack (hack the CNN)
+
+| Requirement | Where / how to check |
+|---|---|
+| Happy image > 90% chosen | `results/adversarial/source_image.png` + `source_probabilities.json` (run: `python scripts/adversarial.py`) |
+| Pixels modified so the net predicts Sad | `results/adversarial/attack_comparison.png` (original · perturbation · adversarial) |
+| Slightly changed & still recognizable | The perturbation is bounded by `adversarial.epsilon` (L∞ ≤ 0.05) — imperceptible; the two faces look identical in the comparison figure |
 
 ---
 
